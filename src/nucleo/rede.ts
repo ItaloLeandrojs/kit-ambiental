@@ -6,6 +6,16 @@ import type { CotaDxf, DxfGeo, TextoDxf } from './dxf.ts';
 import { G } from './geom.ts';
 import type { Feicao, Poste, Pt, Rede, Situacao, TipoRede, Vao } from './tipos.ts';
 
+// Três regras decididas pelo Italo em 14/11/2026, depois de ver os DXFs reais:
+// (1) azul solto e sem etiqueta é legenda, não rede nova; (2) cota sem pontas casando acha o vão pelo meio e pelo comprimento;
+// (3) poste novo nasce do próprio texto (1)xxx/yy quando não há símbolo de poste perto.
+const TOL_PONTA_COTA = 2; // m: pontas da cota até o vão
+const TOL_TOCA_VAO = 1; // m: ponta de vão azul encostando em outro vão
+const TOL_TOCA_POSTE = 2; // m: ponta de vão azul perto de um poste
+const TOL_MEIO_COTA = 15; // m: meio da cota até o meio do vão (cota sem pontas casando)
+const TOL_MEDIDA_COTA = 0.5; // m: |medida da cota - comprimento do vão|
+const RAIO_TEXTO_POSTE = 30; // m: texto (1)xxx/yy até o símbolo do poste, ou até o vão onde nasce o poste
+
 const sem = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '').toUpperCase();
 const RE_CAMADA_REDE = /^(LINHA|REDE)?[-_]?(MT|BT)$/;
 const RE_ETIQUETA_CABO = /^(\(\d\)|\/\d\/)?\s*\d?[A-Z]{1,3}\d{3}/;
@@ -54,20 +64,38 @@ function prefixoDaCota(c: CotaDxf): Situacao | null {
   return e ? SITUACAO[e[1]] : null;
 }
 
+function marcaCota(r: Map<string, { situacao: Situacao; motivo: string }>, id: string, c: CotaDxf) {
+  const s = prefixoDaCota(c);
+  r.set(id, s ? { situacao: s, motivo: `cota ${c.modelo}` } : { situacao: 'existente', motivo: 'cota sem prefixo' });
+}
+
 function etiquetar(d: DxfGeo, ls: Lado[]): Map<string, { situacao: Situacao; motivo: string }> {
   const r = new Map<string, { situacao: Situacao; motivo: string }>();
-  // cota: vai para o vão com as pontas mais perto de p1 e p2 (até 2 m); vence a etiqueta de texto
+  // cota: primeiro pelas pontas (vão mais perto, até TOL_PONTA_COTA); vence a etiqueta de texto
+  const semPontas: CotaDxf[] = [];
   for (const c of d.cotas) {
     let alvo: { l: Lado; dist: number } | null = null;
     for (const l of ls) {
       const direto = Math.max(distP(c.p1, l.pts[0]), distP(c.p2, l.pts[1]));
       const trocado = Math.max(distP(c.p1, l.pts[1]), distP(c.p2, l.pts[0]));
       const dist = Math.min(direto, trocado);
-      if (dist <= 2 && (!alvo || dist < alvo.dist)) alvo = { l, dist };
+      if (dist <= TOL_PONTA_COTA && (!alvo || dist < alvo.dist)) alvo = { l, dist };
     }
-    if (!alvo || r.has(alvo.l.id)) continue;
-    const s = prefixoDaCota(c);
-    r.set(alvo.l.id, s ? { situacao: s, motivo: `cota ${c.modelo}` } : { situacao: 'existente', motivo: 'cota sem prefixo' });
+    if (!alvo) { semPontas.push(c); continue; }
+    if (r.has(alvo.l.id)) continue;
+    marcaCota(r, alvo.l.id, c);
+  }
+  // sem pontas casando: o vão livre de meio mais perto do meio da cota, com o mesmo comprimento
+  for (const c of semPontas) {
+    const meio: Pt = [(c.p1[0] + c.p2[0]) / 2, (c.p1[1] + c.p2[1]) / 2];
+    let alvo: { l: Lado; dist: number } | null = null;
+    for (const l of ls) {
+      if (r.has(l.id)) continue;
+      const m: Pt = [(l.pts[0][0] + l.pts[1][0]) / 2, (l.pts[0][1] + l.pts[1][1]) / 2];
+      const dist = distP(meio, m);
+      if (dist <= TOL_MEIO_COTA && Math.abs(c.medida - distP(l.pts[0], l.pts[1])) <= TOL_MEDIDA_COTA && (!alvo || dist < alvo.dist)) alvo = { l, dist };
+    }
+    if (alvo) marcaCota(r, alvo.l.id, c);
   }
   // texto de cabo: vai para o vão mais perto (até 8 m, projeção dentro do segmento); cada vão guarda o texto mais perto
   const melhor = new Map<string, { dist: number; t: TextoDxf }>();
@@ -91,12 +119,18 @@ function etiquetar(d: DxfGeo, ls: Lado[]): Map<string, { situacao: Situacao; mot
   return r;
 }
 
-function paraVaos(d: DxfGeo, ls: Lado[], tipoDe: (l: Lado) => TipoRede | null): Vao[] {
+// `todos`: os lados da rede (para ver se um vão azul encosta em outro); `postes`: pontos dos símbolos de poste
+function paraVaos(d: DxfGeo, ls: Lado[], tipoDe: (l: Lado) => TipoRede | null, todos: { id: string; pts: Pt[] }[], postes: Pt[]): Vao[] {
   const et = etiquetar(d, ls);
+  const solto = (l: Lado) =>
+    l.pts.every((e) =>
+      !todos.some((o) => o.id !== l.id && o.pts.some((q) => distP(e, q) <= TOL_TOCA_VAO)) &&
+      !postes.some((q) => distP(e, q) <= TOL_TOCA_POSTE));
   return ls.map((l) => {
     const e = et.get(l.id);
     let situacao: Situacao, motivo: string;
     if (e) ({ situacao, motivo } = e);
+    else if (l.cor === 5 && solto(l)) { situacao = 'existente'; motivo = 'azul solto, sem etiqueta (parece legenda)'; }
     else if (l.cor === 5) { situacao = 'novo'; motivo = 'azul, sem etiqueta'; }
     else { situacao = 'existente'; motivo = 'sem etiqueta'; }
     return { id: l.id, pts: [l.pts[0], l.pts[1]], camada: l.camada, tipo: tipoDe(l), situacao, motivo };
@@ -132,20 +166,34 @@ function juntarConjugadas(vaos: Vao[]): Vao[] {
   return vaos.filter((v) => !usados.has(v.id)).map((v) => conj.get(v.id) ?? v);
 }
 
-function postesDoDxf(d: DxfGeo): Poste[] {
+function postesDoDxf(d: DxfGeo, ls: Lado[]): Poste[] {
   const postes: Poste[] = d.blocos
     .filter((b) => sem(b.camada).includes('POSTE'))
     .map((b, i) => ({ id: `p${i + 1}`, ponto: b.ponto, numero: null, novo: false, coordEscrita: null, etiqueta: null }));
-  if (postes.length === 0) return postes;
+  const simbolos = postes.length;
+  let n = simbolos;
   for (const t of d.textos) {
     if (!t.linhas.some((l) => RE_POSTE_NOVO.test(l))) continue;
-    let alvo: { p: Poste; dist: number } | null = null;
-    for (const p of postes) {
-      const dist = Math.hypot(p.ponto[0] - t.ponto[0], p.ponto[1] - t.ponto[1]);
-      if (dist <= 30 && (!alvo || dist < alvo.dist)) alvo = { p, dist };
+    let p: Poste | null = null;
+    let dmin = Infinity;
+    for (const q of postes.slice(0, simbolos)) {
+      const dist = distP(q.ponto, t.ponto);
+      if (dist <= RAIO_TEXTO_POSTE && dist < dmin) { p = q; dmin = dist; }
     }
-    if (!alvo) continue;
-    const p = alvo.p;
+    if (!p) {
+      // sem símbolo perto: nasce na ponta mais perto do vão mais perto (até 30 m), senão no ponto do texto
+      let ponto: Pt = t.ponto;
+      let vmin = Infinity;
+      for (const l of ls) {
+        const { dist } = noSegmento(t.ponto, l.pts);
+        if (dist <= RAIO_TEXTO_POSTE && dist < vmin) {
+          vmin = dist;
+          ponto = distP(t.ponto, l.pts[0]) <= distP(t.ponto, l.pts[1]) ? l.pts[0] : l.pts[1];
+        }
+      }
+      p = { id: `p${++n}`, ponto, numero: null, novo: false, coordEscrita: null, etiqueta: null };
+      postes.push(p);
+    }
     p.novo = true;
     p.etiqueta = t.ponto;
     const ultima = /^P?(\d+)$/i.exec((t.linhas[t.linhas.length - 1] ?? '').trim());
@@ -160,7 +208,9 @@ function postesDoDxf(d: DxfGeo): Poste[] {
 
 export function proporRedeDxf(d: DxfGeo): Rede {
   const ls = lados(d).filter((l) => tipoDaCamada(l.camada) !== null);
-  return { origem: 'dxf', vaos: juntarConjugadas(paraVaos(d, ls, (l) => tipoDaCamada(l.camada))), postes: postesDoDxf(d) };
+  const postes = postesDoDxf(d, ls);
+  const simbolos = d.blocos.filter((b) => sem(b.camada).includes('POSTE')).map((b) => b.ponto);
+  return { origem: 'dxf', vaos: juntarConjugadas(paraVaos(d, ls, (l) => tipoDaCamada(l.camada), ls, simbolos)), postes };
 }
 
 // camadas com linhas que não são de rede: o projetista pode incluí-las
@@ -171,7 +221,8 @@ export function camadasCandidatas(d: DxfGeo): string[] {
 export function incluirCamada(r: Rede, d: DxfGeo, camada: string, tipo: TipoRede): Rede {
   const ls = lados(d).filter((l) => l.camada === camada);
   const ids = new Set(r.vaos.map((v) => v.id));
-  const novos = paraVaos(d, ls, () => tipo).filter((v) => !ids.has(v.id));
+  const simbolos = d.blocos.filter((b) => sem(b.camada).includes('POSTE')).map((b) => b.ponto);
+  const novos = paraVaos(d, ls, () => tipo, [...r.vaos, ...ls], simbolos).filter((v) => !ids.has(v.id));
   return { ...r, vaos: juntarConjugadas([...r.vaos, ...novos]) };
 }
 

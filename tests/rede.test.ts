@@ -50,8 +50,8 @@ describe('proporRedeDxf: vãos e situação', () => {
     expect(proporRedeDxf(g).vaos[0].situacao).toBe('novo');
   });
 
-  it('cota com pontas a mais de 2 m não vale', () => {
-    const g = { ...vazio(), linhas: [linha('MT', [[0, 0], [10, 0]])], cotas: [cota([0, 3], [10, 3], '(1)<>')] };
+  it('cota com pontas e meio longe (20 m) não vale', () => {
+    const g = { ...vazio(), linhas: [linha('MT', [[0, 0], [10, 0]])], cotas: [cota([0, 20], [10, 20], '(1)<>')] };
     expect(proporRedeDxf(g).vaos[0].situacao).toBe('existente');
   });
 
@@ -81,7 +81,7 @@ describe('proporRedeDxf: vãos e situação', () => {
   });
 
   it('vão sem etiqueta e azul (cor 5) é novo, com motivo', () => {
-    const g = { ...vazio(), linhas: [linha('LINHABT', [[0, 0], [10, 0]], 5), linha('LINHABT', [[0, 50], [10, 50]], 1)] };
+    const g = { ...vazio(), linhas: [linha('LINHABT', [[0, 0], [10, 0]], 5), linha('LINHABT', [[10, 0], [20, 0]], 1)] };
     const r = proporRedeDxf(g);
     expect(r.vaos[0]).toMatchObject({ situacao: 'novo', motivo: 'azul, sem etiqueta' });
     expect(r.vaos[1].situacao).toBe('existente');
@@ -144,15 +144,82 @@ describe('postes', () => {
     expect(r.postes[1]).toMatchObject({ id: 'p2', novo: false, numero: null, coordEscrita: null, etiqueta: null });
   });
 
-  it('texto a mais de 30 m do poste não o torna novo; número aceita P', () => {
+  it('texto a mais de 30 m do símbolo não o torna novo (nasce outro poste no texto); número aceita P', () => {
     const g: DxfGeo = {
       ...vazio(),
       blocos: [{ camada: 'POSTES', nome: 'P', ponto: [0, 0] }],
       textos: [texto(['(1)600/12', 'P12'], [31, 0])],
     };
-    expect(proporRedeDxf(g).postes[0].novo).toBe(false);
+    const longe = proporRedeDxf(g).postes;
+    expect(longe[0].novo).toBe(false);
+    expect(longe).toHaveLength(2);
+    expect(longe[1]).toMatchObject({ id: 'p2', ponto: [31, 0], novo: true, numero: '12', etiqueta: [31, 0] });
     g.textos[0].ponto = [29, 0];
-    expect(proporRedeDxf(g).postes[0]).toMatchObject({ novo: true, numero: '12' });
+    const perto = proporRedeDxf(g).postes;
+    expect(perto).toHaveLength(1);
+    expect(perto[0]).toMatchObject({ novo: true, numero: '12' });
+  });
+
+  it('sem símbolo: o poste nasce na ponta mais perto do vão a até 30 m do texto', () => {
+    const g: DxfGeo = {
+      ...vazio(),
+      linhas: [linha('LINHABT', [[0, 0], [50, 0]])],
+      textos: [texto(['(1)300/9 S2N', '(0000001, 0000002)', 'P3'], [45, 20])],
+    };
+    const r = proporRedeDxf(g);
+    expect(r.postes).toEqual([{ id: 'p1', ponto: [50, 0], numero: '3', novo: true, coordEscrita: [1, 2], etiqueta: [45, 20] }]);
+  });
+
+  it('sem símbolo e sem vão a 30 m: o poste nasce no ponto do texto', () => {
+    const g: DxfGeo = {
+      ...vazio(),
+      linhas: [linha('LINHABT', [[0, 0], [50, 0]])],
+      textos: [texto(['(1)300/9 S2N'], [45, 40])],
+    };
+    expect(proporRedeDxf(g).postes).toHaveLength(1);
+    expect(proporRedeDxf(g).postes[0]).toMatchObject({ ponto: [45, 40], novo: true });
+  });
+});
+
+describe('azul solto (legenda)', () => {
+  it('azul sem etiqueta que não encosta em nada não é novo', () => {
+    const g: DxfGeo = { ...vazio(), linhas: [linha('LINHAMT', [[0, 0], [10, 0]], 5)] };
+    expect(proporRedeDxf(g).vaos[0]).toMatchObject({ situacao: 'existente', motivo: 'azul solto, sem etiqueta (parece legenda)' });
+  });
+
+  it('azul sem etiqueta ligado a outro vão (1 m) ou a um poste (2 m) continua novo', () => {
+    const g: DxfGeo = {
+      ...vazio(),
+      linhas: [linha('LINHAMT', [[0, 0], [10, 0]], 5), linha('LINHAMT', [[10.5, 0], [30, 0]], 1)],
+    };
+    expect(proporRedeDxf(g).vaos[0]).toMatchObject({ situacao: 'novo', motivo: 'azul, sem etiqueta' });
+    const h: DxfGeo = {
+      ...vazio(),
+      linhas: [linha('LINHAMT', [[0, 0], [10, 0]], 5)],
+      blocos: [{ camada: 'POSTE', nome: 'P', ponto: [11.5, 0] }],
+    };
+    expect(proporRedeDxf(h).vaos[0].situacao).toBe('novo');
+  });
+});
+
+describe('cota casada pelo meio', () => {
+  const g = (medida: number): DxfGeo => ({
+    ...vazio(),
+    linhas: [linha('LINHAMT', [[0, 0], [9, 0]])],
+    // pontas a 11 m das do vão, mesmo comprimento
+    cotas: [{ camada: 'X', estilo: '1.A', modelo: '(1)<>', p1: [0, 11], p2: [9, 11], medida }],
+  });
+  it('pontas longe mas meio a até 15 m e mesmo comprimento: casa', () => {
+    expect(proporRedeDxf(g(9)).vaos[0].situacao).toBe('novo');
+  });
+  it('comprimento difere 1 m: não casa', () => {
+    expect(proporRedeDxf(g(10)).vaos[0].situacao).toBe('existente');
+  });
+  it('vão já tomado por outra cota é pulado', () => {
+    const d = g(9);
+    d.cotas.push({ camada: 'X', estilo: '1.A', modelo: '(2)<>', p1: [0, 12], p2: [9, 12], medida: 9 });
+    d.cotas.unshift({ camada: 'X', estilo: '1.A', modelo: '(3)<>', p1: [0, 0], p2: [9, 0], medida: 9 });
+    expect(proporRedeDxf(d).vaos[0].situacao).toBe('retirado');
   });
 });
 
@@ -182,7 +249,7 @@ describe('edição e camadas candidatas', () => {
   it('camadasCandidatas lista as outras camadas; incluirCamada as traz com o tipo', () => {
     const g: DxfGeo = {
       ...vazio(),
-      linhas: [linha('MT', [[0, 0], [10, 0]]), linha('RUA', [[0, 9], [10, 9]], 5)],
+      linhas: [linha('MT', [[0, 0], [10, 0]]), linha('RUA', [[10, 0.5], [20, 0.5]], 5)],
     };
     expect(camadasCandidatas(g)).toEqual(['RUA']);
     const r = incluirCamada(proporRedeDxf(g), g, 'RUA', 'BT');
