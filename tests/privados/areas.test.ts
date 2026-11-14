@@ -26,6 +26,13 @@ describe.skipIf(!existsSync(KMZ))('KMZ de Áreas Protegidas (Rev. 37)', () => {
     expect([...base.areas, ...base.municipios].filter((a) => !a.nome.trim())).toEqual([]);
   });
 
+  it('nenhum nome é id interno de camada e município não leva o nome da pasta', () => {
+    const todos = [...base.areas, ...base.municipios];
+    expect(todos.filter((a) => /^[a-z0-9_]+$/.test(a.nome))).toEqual([]);
+    expect(base.municipios.filter((m) => m.nome === m.pasta[m.pasta.length - 1])).toEqual([]);
+    expect(base.municipios.some((m) => m.nome === 'Milhã')).toBe(true);
+  });
+
   it('toda área das pastas da tabela tem órgão', () => {
     const trechos = ['UNIDADE DE CONSERVACAO', 'QUILOMBOLA', 'ASSENTAMENTO', 'TERRAS INDIGENAS', 'IPHAN', 'DNOCS', 'MACROZONEAMENTO'];
     const alvo = base.areas.filter((a) => a.pasta.some((p) => trechos.some((t) => semAcento(p).includes(t))));

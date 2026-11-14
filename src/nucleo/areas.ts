@@ -15,7 +15,7 @@ export interface BaseAreas { revisao: string; data: string; areas: AreaProtegida
 export interface Orgao { categoria: string; esfera: string; licencia: string; gestor: string; soIcmbio?: boolean }
 
 const ERRO_NAO_E_BASE = 'Este arquivo não é o KMZ de Áreas Protegidas do Ceará.';
-const ATRIBUTOS_DE_NOME = ['nome_zona', 'nome_proje', 'NM_COMUN3', 'terrai_nome', 'NOME_UC1', 'nome', 'Nome'];
+const ATRIBUTOS_DE_NOME = ['nome_zona', 'nome_proje', 'NM_COMUN3', 'terrai_nome', 'NOME_UC1', 'nome', 'Nome', 'Municipio'];
 
 // sem acento e em maiúsculas, para comparar nomes de pasta
 export const semAcento = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').toUpperCase();
@@ -33,7 +33,12 @@ function nomeDaArea(nome: string, atributos: Record<string, string>, pasta: stri
     const v = (atributos[k] ?? '').trim();
     if (v) return v;
   }
-  return (pasta[pasta.length - 1] ?? '').replace(/\.(kml|kmz)$/i, '').trim();
+  // pasta mais próxima com nome legível: pula ids internos de camada (ex.: zo_vii)
+  for (let i = pasta.length - 1; i >= 0; i--) {
+    const n = pasta[i].replace(/\.(kml|kmz)$/i, '').trim();
+    if (n && !/^[a-z0-9_]+$/.test(n)) return n;
+  }
+  return '';
 }
 
 function caixaDe(poligonos: Pt[][][], linhas: Pt[][]): [number, number, number, number] {

@@ -87,6 +87,17 @@ describe('lerAreasProtegidas', () => {
     expect(b.areas[0].nome).toBe('Zona Sem Nome');
   });
 
+  it('no fallback da pasta pula ids internos e sobe até o nome legível', () => {
+    const corpo = pasta('Macrozoneamento', pasta('Zona de Orla', pasta('ZONA DE ORLA VII.kml', pasta('zo_vii', placemark('', poligono(-39, -4))))));
+    const b = lerAreasProtegidas(kmz(municipios() + corpo), NOME);
+    expect(b.areas[0].nome).toBe('ZONA DE ORLA VII');
+  });
+
+  it('município sem nome usa o atributo Municipio', () => {
+    const b = lerAreasProtegidas(kmz(municipios(99) + pasta('Municípios_CE', placemark('', poligono(-30, -4), { Municipio: 'Cidade Inventada' }))), NOME);
+    expect(b.municipios[99].nome).toBe('Cidade Inventada');
+  });
+
   it('dá o erro exato em KML de rede, sem a pasta de municípios ou com poucos municípios', () => {
     const msg = 'Este arquivo não é o KMZ de Áreas Protegidas do Ceará.';
     const rede = strToU8(kml(placemark('Vão 1', '<LineString><coordinates>-38.5,-3.7 -38.51,-3.71</coordinates></LineString>')));
