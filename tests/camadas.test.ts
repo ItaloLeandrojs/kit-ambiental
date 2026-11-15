@@ -114,8 +114,17 @@ describe('montarCamadas', () => {
     expect(cs[2].tipo).toBe('poligono');
   });
 
-  it('APP confirmada sem a água na base não derruba: sai sem a camada da água', () => {
+  it('APP confirmada com aguaId: sem a base ou sem a água nela dá erro', () => {
     const app: AreaConfirmada = { nome: 'APP X', tipo: 'APP', poligonos: [[retangulo(-100, -100, 300, 300)]], largura: 100, aguaId: 9999 };
+    const rr = rede([vao('a', 'MT', [pt(-50, 250), pt(150, 250)])]);
+    const bb = base([]);
+    const c = calcularCaso(rr, bb, [app]);
+    expect(() => montarCamadas(OS, c, rr, [], bb)).toThrow('A água da APP confirmada não está na base de áreas.');
+    expect(() => montarCamadas(OS, c, rr)).toThrow('Falta a base de áreas para a água da APP confirmada.');
+  });
+
+  it('APP confirmada sem aguaId: sai sem camada de água, sem erro', () => {
+    const app: AreaConfirmada = { nome: 'APP X', tipo: 'APP', poligonos: [[retangulo(-100, -100, 300, 300)]], largura: 100 };
     const rr = rede([vao('a', 'MT', [pt(-50, 250), pt(150, 250)])]);
     const bb = base([]);
     const cs = montarCamadas(OS, calcularCaso(rr, bb, [app]), rr, [], bb);

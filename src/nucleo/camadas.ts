@@ -20,8 +20,8 @@ const poligonosDe = (poligonos: Pt[][][]): Geometria[] =>
  * Gera as camadas do kit, na ordem do desenho: rede (MT, BT, conjugada), postes, uma por área com
  * intervenção (a APP confirmada traz a água ao lado), uma faixa por área, e por fim os `extras`.
  *
- * A água de uma APP confirmada é achada em `base.areas` pelo `aguaId`; sem `base` (ou sem a água lá),
- * a camada da água simplesmente não sai.
+ * A água de uma APP confirmada é achada em `base.areas` pelo `aguaId`; sem `base`, ou sem a água lá,
+ * dá erro (kit sem a água seria um kit incompleto em silêncio). APP sem `aguaId` não leva camada de água.
  *
  * Faixa = buffer(trechos, FAIXA/2) com ponta reta. Intervenção só de poste (sem trecho) não tem faixa:
  * a área dela é 2,856 m² por poste, não uma faixa, e uma camada vazia não sai.
@@ -68,12 +68,12 @@ export function montarCamadas(os: string, caso: Caso, rede: Rede, extras: Camada
     nomesDasAreas.set(iv, parte);
     camada(parte, 'poligono', [{ name: a.nome, geometria: poligonosDe(a.poligonos) }]);
     if ('aguaId' in a && a.aguaId !== undefined && !aguasFeitas.has(a.aguaId)) {
-      const agua = base?.areas.find((x) => x.id === a.aguaId);
-      if (agua) {
-        aguasFeitas.add(agua.id);
-        if (agua.poligonos.length) camada(unico(agua.nome), 'poligono', [{ name: agua.nome, geometria: poligonosDe(agua.poligonos) }]);
-        else if (agua.linhas.length) camada(unico(agua.nome), 'linha', [{ name: agua.nome, geometria: agua.linhas.map((pts) => ({ t: 'linha', pts })) }]);
-      }
+      if (!base) throw new Error('Falta a base de áreas para a água da APP confirmada.');
+      const agua = base.areas.find((x) => x.id === a.aguaId);
+      if (!agua) throw new Error('A água da APP confirmada não está na base de áreas.');
+      aguasFeitas.add(agua.id);
+      if (agua.poligonos.length) camada(unico(agua.nome), 'poligono', [{ name: agua.nome, geometria: poligonosDe(agua.poligonos) }]);
+      else if (agua.linhas.length) camada(unico(agua.nome), 'linha', [{ name: agua.nome, geometria: agua.linhas.map((pts) => ({ t: 'linha', pts })) }]);
     }
   }
 
