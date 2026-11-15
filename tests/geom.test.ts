@@ -41,4 +41,15 @@ describe('G: acréscimos', () => {
     expect(G.pontos(G.linha([[0, 0], [1, 2], [3, 4]]))).toEqual([[0, 0], [1, 2], [3, 4]]);
     expect(G.pontos(G.ponto([7, 8]))).toEqual([[7, 8]]);
   });
+
+  it('poligonos: anel externo e furo de cada polígono, e vazio dá lista vazia', () => {
+    const anel = G.diferenca(G.caixa(0, 0, 10, 10), G.caixa(3, 3, 6, 6));
+    const r = G.poligonos(anel);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toHaveLength(2);
+    expect(G.area(G.poligono(r[0]))).toBeCloseTo(91, 9);
+    const dois = G.poligonos(G.uniao([G.caixa(0, 0, 1, 1), G.caixa(5, 5, 6, 6)]));
+    expect(dois).toHaveLength(2);
+    expect(G.poligonos(G.diferenca(G.caixa(0, 0, 1, 1), G.caixa(0, 0, 1, 1)))).toEqual([]);
+  });
 });

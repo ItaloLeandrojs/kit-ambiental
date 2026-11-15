@@ -5,3 +5,5 @@ export const FAIXA: Record<TipoRede, number> = { MT: 6, BT: 3, CONJ: 6 }; // met
 export const M2_POSTE_SEM_REDE = 2.856; // m² por poste novo em área sem vão novo (editável na tela)
 export const RAIO_PROXIMA = 100; // metros: área a menos disso da rede nova, sem cruzar, vira aviso
 export const MIN_DENTRO = 0.5; // metros: pedaço menor que isso só encosta, não é intervenção
+// larguras de APP propostas em volta da água (Código Florestal, Lei 12.651, art. 4º); a confirmar com o P&M
+export const LARGURA_APP = { acude: 100, lagoa: 100, rio: 30 } as const; // metros

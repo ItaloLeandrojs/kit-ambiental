@@ -135,6 +135,15 @@ export const G = {
           return fab.createPolygon(p.getExteriorRing(), buracos);
         }),
     ),
+  // polígonos da geometria, cada um como anéis [externo, ...furos]
+  poligonos: (g: Geo): Pt[][][] =>
+    folhas(j(g))
+      .filter((f) => f.getGeometryType() === 'Polygon')
+      .map((p) => {
+        const aneis = [pts(p.getExteriorRing())];
+        for (let i = 0; i < p.getNumInteriorRing(); i++) aneis.push(pts(p.getInteriorRingN(i)));
+        return aneis;
+      }),
   linhas: (g: Geo): Pt[][] =>
     folhas(j(g))
       .filter((f) => f.getGeometryType() === 'LineString' || f.getGeometryType() === 'LinearRing')
