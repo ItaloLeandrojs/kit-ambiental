@@ -48,4 +48,18 @@ describe('resumoTexto', () => {
       'Aviso: Nenhuma rede nova marcada. Confirme no mapa o que é rede nova.',
     );
   });
+
+  it('usa a coordenada da geometria, não a escrita; poste sem número fica só com a coordenada', () => {
+    const r: Rede = {
+      origem: 'dxf',
+      vaos: redeMt.vaos,
+      postes: [
+        { id: 'p6', ponto: [500010, 9500050], numero: null, novo: true, coordEscrita: [500999, 9500999], etiqueta: null },
+        { id: 'p8', ponto: [500318, 9500050], numero: '8', novo: true, coordEscrita: [500777, 9500777], etiqueta: null },
+      ],
+    };
+    const t = resumoTexto(calcularCaso(r, base([uc('Parque Inventado', ['Unidade de Conservação Estadual', 'Uso Sustentável'])]), []), '');
+    expect(t).toContain('entre o poste (0500010, 9500050) e o poste Nº 8 (0500318, 9500050)');
+    expect(t).not.toContain('sem número');
+  });
 });

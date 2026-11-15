@@ -8,5 +8,7 @@ export const TEXTOS = {
   litoral: 'Obra em município do litoral: confira se há duna, restinga ou beira-mar a menos de 100 m.',
   foraDaCoordenada: 'seu desenho não está na coordenada real; o kit sairia deslocado',
   shpDeslocado: 'o órgão devolve: shape não espacializado',
+  // provisório: texto a confirmar com o Italo
+  cruzaLinha: 'a rede nova cruza esta área, que no KMZ é só uma linha; consultar o P&M',
   faixaDominio: 'precisa de processo DNIT/SOP',
 } as const;

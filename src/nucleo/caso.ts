@@ -7,7 +7,7 @@ import { MUNICIPIOS_LITORAL } from '../regras/litoral.ts';
 import { TEXTOS } from '../regras/textos.ts';
 
 export interface Trecho { tipo: TipoRede; metros: number; pts: Pt[]; de: Poste | null; ate: Poste | null }
-export interface AreaConfirmada { nome: string; tipo: 'APP'; poligono: Pt[][]; largura: number } // APP aceita pelo projetista (Tarefa 8)
+export interface AreaConfirmada { nome: string; tipo: 'APP'; poligono: Pt[][]; largura: number; aguaId?: number } // APP aceita pelo projetista (Tarefa 8); aguaId = id da água de onde a APP veio
 export interface Intervencao {
   area: AreaProtegida | AreaConfirmada; orgao: Orgao | null;
   trechos: Trecho[]; metros: Record<TipoRede, number>; // metros sem arredondar
@@ -25,10 +25,17 @@ type Caixa = [number, number, number, number];
 const ehConfirmada = (a: AreaProtegida | AreaConfirmada): a is AreaConfirmada => 'poligono' in a;
 const cruza = (a: Caixa, b: Caixa): boolean => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 const alarga = (c: Caixa, d: number): Caixa => [c[0] - d, c[1] - d, c[2] + d, c[3] + d];
-const caixaDePts = (ps: Pt[]): Caixa => [
-  Math.min(...ps.map((p) => p[0])), Math.min(...ps.map((p) => p[1])),
-  Math.max(...ps.map((p) => p[0])), Math.max(...ps.map((p) => p[1])),
-];
+// com laço: Math.min(...) estoura a pilha em anéis grandes
+function caixaDePts(ps: Pt[]): Caixa {
+  const c: Caixa = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const p of ps) {
+    if (p[0] < c[0]) c[0] = p[0];
+    if (p[1] < c[1]) c[1] = p[1];
+    if (p[0] > c[2]) c[2] = p[0];
+    if (p[1] > c[3]) c[3] = p[1];
+  }
+  return c;
+}
 const comp = (p: Pt[]): number => p.slice(1).reduce((s, q, i) => s + Math.hypot(q[0] - p[i][0], q[1] - p[i][1]), 0);
 const mesmoPonto = (a: Pt, b: Pt): boolean => Math.hypot(a[0] - b[0], a[1] - b[1]) <= TOL_JUNTA;
 const aneisValidos = (an: Pt[][]): boolean => an.length > 0 && an[0].length >= 4;
@@ -71,16 +78,15 @@ function posteDaPonta(postes: Poste[], p: Pt): Poste | null {
   return melhor;
 }
 
-// área candidata ao cruzamento, com os polígonos já montados (as áreas se distinguem por identidade, nunca por nome)
-interface Alvo { area: AreaProtegida | AreaConfirmada; polis: { caixa: Caixa; geo: Geo }[]; caixa: Caixa }
+// área candidata ao cruzamento, com os polígonos já unidos (as áreas se distinguem por identidade, nunca por nome)
+interface Alvo { area: AreaProtegida | AreaConfirmada; geo: Geo | null; caixa: Caixa }
 
 function alvoDe(a: AreaProtegida | AreaConfirmada): Alvo {
-  const lista = ehConfirmada(a) ? [a.poligono] : a.poligonos;
-  const polis = lista.filter(aneisValidos).map((an) => ({ geo: G.poligono(an), caixa: caixaDePts(an[0]) }));
-  const caixa: Caixa = ehConfirmada(a)
-    ? aneisValidos(a.poligono) ? caixaDePts(a.poligono[0]) : [Infinity, Infinity, -Infinity, -Infinity]
-    : a.caixa;
-  return { area: a, polis, caixa };
+  const lista = (ehConfirmada(a) ? [a.poligono] : a.poligonos).filter(aneisValidos);
+  // une os polígonos da área: polígonos sobrepostos não contam o mesmo metro duas vezes
+  const geo = lista.length ? G.uniao(lista.map((an) => G.poligono(an))) : null;
+  const caixa: Caixa = ehConfirmada(a) ? (aneisValidos(a.poligono) ? caixaDePts(a.poligono[0]) : [Infinity, Infinity, -Infinity, -Infinity]) : a.caixa;
+  return { area: a, geo, caixa };
 }
 
 // Água da COGERH (açude, lagoa, rio) NÃO vira intervenção por si: o hectare é a faixa da obra, nunca o açude inteiro,
@@ -88,7 +94,8 @@ function alvoDe(a: AreaProtegida | AreaConfirmada): Alvo {
 export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfirmada[], m2PorPoste: Record<string, number> = {}): Caso {
   const novos: Vao[] = redeNova(rede);
   const postesNovos = rede.postes.filter((p) => p.novo);
-  if (novos.length === 0 && postesNovos.length === 0) {
+  const semVao = novos.length === 0;
+  if (semVao && postesNovos.length === 0) {
     // sem rede nova não se cruza nada: dizer "sem área protegida" aqui seria falso verde
     return {
       municipio: null, litoral: false, intervencoes: [], proximas: [],
@@ -114,10 +121,9 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
   const semCruzar: Alvo[] = [];
   for (const alvo of alvos) {
     const pedacos: Pedaco[] = [];
-    for (const poli of alvo.polis) {
-      if (!cruza(poli.caixa, caixaRede)) continue;
+    if (alvo.geo && cruza(alvo.caixa, caixaRede)) {
       for (const v of novos) {
-        for (const pts of G.dentro(v.pts, poli.geo)) pedacos.push({ tipo: v.tipo as TipoRede, pts });
+        for (const pts of G.dentro(v.pts, alvo.geo)) pedacos.push({ tipo: v.tipo as TipoRede, pts });
       }
     }
     // o corte de 0,5 m vale para o trecho já juntado: quem só encosta não é intervenção
@@ -130,7 +136,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
     const postesSemRede = trechos.length
       ? []
       : postesNovos
-          .filter((p) => alvo.polis.some((poli) => G.contem(poli.geo, G.ponto(p.ponto))))
+          .filter((p) => alvo.geo !== null && G.contem(alvo.geo, G.ponto(p.ponto)))
           .map((p) => ({ poste: p, m2: m2PorPoste[p.id] ?? M2_POSTE_SEM_REDE }));
     if (trechos.length === 0 && postesSemRede.length === 0) {
       if (!ehConfirmada(alvo.area)) semCruzar.push(alvo);
@@ -149,6 +155,13 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
   }
 
   const avisos: Aviso[] = [];
+  if (semVao) {
+    // só poste novo, sem vão novo: o projeto pode estar com a rede mal marcada; nunca dizer "sem área protegida"
+    avisos.push({
+      nivel: 'amarelo', codigo: 'SEM_REDE_NOVA', texto: TEXTOS.semRedeNova,
+      comoCorrigir: 'Há poste novo mas nenhum vão marcado como novo; no mapa, marque os vãos que são rede nova (1), se houver.',
+    });
+  }
   for (const iv of intervencoes) {
     if (iv.orgao === null) {
       avisos.push({
@@ -161,7 +174,16 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
   const proximas: Caso['proximas'] = [];
   for (const alvo of semCruzar) {
     const a = alvo.area as AreaProtegida; // confirmada nunca entra em semCruzar
-    const d = Math.min(Infinity, ...alvo.polis.map((p) => distRede(p.geo)), ...a.linhas.map((l) => distRede(G.linha(l))));
+    const dLinhas = a.linhas.map((l) => distRede(G.linha(l)));
+    if (alvo.geo === null && Math.min(Infinity, ...dLinhas) <= TOL_JUNTA) {
+      // provisório: texto a confirmar com o Italo
+      avisos.push({
+        nivel: 'amarelo', codigo: 'CRUZA_LINHA', texto: `${a.nome}: ${TEXTOS.cruzaLinha}`,
+        comoCorrigir: `Pergunte ao P&M como tratar "${a.nome}", que no KMZ é só uma linha e a rede nova cruza; o site não calcula metros nem hectares para linha.`,
+      });
+      continue;
+    }
+    const d = Math.min(Infinity, ...(alvo.geo ? [distRede(alvo.geo)] : []), ...dLinhas);
     if (d <= RAIO_PROXIMA) {
       proximas.push({ area: a, distancia: d });
       avisos.push({
@@ -176,10 +198,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
     if (ehAgua(a) === null || !cruza(a.caixa, caixaPerto)) continue;
     const geos = [...a.poligonos.filter(aneisValidos).map((p) => G.poligono(p)), ...a.linhas.map((l) => G.linha(l))];
     if (!geos.length || Math.min(...geos.map(distRede)) > RAIO_PROXIMA) continue;
-    const confirmada = confirmadas.some(
-      (c) => aneisValidos(c.poligono) && geos.some((g) => G.distancia(g, G.poligono(c.poligono)) <= MIN_DENTRO),
-    );
-    if (confirmada) continue;
+    if (confirmadas.some((c) => c.aguaId === a.id)) continue; // só a APP confirmada para ESTA água tira o aviso
     avisos.push({
       nivel: 'amarelo', codigo: 'APP_POSSIVEL', texto: `Rede nova a menos de 100 m de ${a.nome}. ${TEXTOS.appCampo}`,
       comoCorrigir: `Confira em campo se a margem de "${a.nome}" é APP; se for, aceite a APP proposta no mapa para ela entrar nos metros e nos hectares.`,
@@ -201,19 +220,41 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
   }
   const pMeio = G.ponto(meio);
   const ponto: Caixa = [meio[0], meio[1], meio[0], meio[1]];
-  const mun = base.municipios.find((m) =>
-    m.poligonos.some((an) => aneisValidos(an) && cruza(caixaDePts(an[0]), ponto) && G.contem(G.poligono(an), pMeio)),
-  );
+  const poligonosDe = (m: AreaProtegida): Geo[] => m.poligonos.filter(aneisValidos).map((an) => G.poligono(an));
+  let mun = base.municipios.find((m) => cruza(m.caixa, ponto) && poligonosDe(m).some((g) => G.contem(g, pMeio)));
+  let incerto = false;
+  if (!mun) {
+    // o meio não cai em nenhum município: usa o mais perto e avisa
+    incerto = true;
+    let dMin = Infinity;
+    for (const m of base.municipios) {
+      for (const g of poligonosDe(m)) {
+        const d = G.distancia(pMeio, g);
+        if (d < dMin) { dMin = d; mun = m; }
+      }
+    }
+  }
   const municipio = mun?.nome ?? null;
-  const litoral = municipio !== null && MUNICIPIOS_LITORAL.some((m) => semAcento(m) === semAcento(municipio));
+  if (incerto) {
+    avisos.push({
+      nivel: 'amarelo', codigo: 'MUNICIPIO_INCERTO', texto: 'O meio da rede não cai dentro de nenhum município do KMZ; confira o município da obra.',
+      comoCorrigir: `Abra a rede no Google Earth, veja em que município ela está${municipio ? ` (o mais perto no KMZ é ${municipio})` : ''} e use esse nome no memorial.`,
+    });
+  }
+  // litoral: qualquer município a até 100 m da rede nova que esteja na lista (a obra pode ficar na divisa)
+  const ehLitoral = (nome: string): boolean => MUNICIPIOS_LITORAL.some((m) => semAcento(m) === semAcento(nome));
+  const litoralPerto = base.municipios.filter(
+    (m) => ehLitoral(m.nome) && cruza(m.caixa, caixaPerto) && poligonosDe(m).some((g) => distRede(g) <= RAIO_PROXIMA),
+  );
+  const litoral = litoralPerto.length > 0;
   if (litoral) {
     avisos.push({
       nivel: 'amarelo', codigo: 'LITORAL', texto: TEXTOS.litoral,
-      comoCorrigir: `Confira no Google Earth se há duna, restinga ou beira-mar a menos de 100 m da rede nova em ${municipio}.`,
+      comoCorrigir: `Confira no Google Earth se há duna, restinga ou beira-mar a menos de 100 m da rede nova em ${litoralPerto.map((m) => m.nome).join(', ')}.`,
     });
   }
 
-  if (intervencoes.length === 0 && avisos.length === 0) {
+  if (!semVao && intervencoes.length === 0 && avisos.length === 0) {
     avisos.push({
       nivel: 'amarelo', codigo: 'SEM_AREA', texto: TEXTOS.semArea,
       comoCorrigir: 'Confirme em campo se há APP (rio, lagoa, açude ou duna) perto da obra; o KMZ não cobre isso.',

@@ -8,9 +8,9 @@ const NOME_REDE: Record<TipoRede, string> = {
   CONJ: 'rede conjugada de média e baixa tensão',
 };
 
-// coordenada escrita no desenho, se houver; senão a posição do poste
+// a coordenada vem da geometria (ponto), como o KML e o SHP; poste sem número fica só com a coordenada
 const postePt = (p: Poste | null, ponta: Pt): string =>
-  p ? `o poste Nº ${p.numero ?? 'sem número'} ${coordTexto(p.coordEscrita ?? p.ponto)}` : `o ponto ${coordTexto(ponta)}`;
+  p ? `o poste ${p.numero ? `Nº ${p.numero} ` : ''}${coordTexto(p.ponto)}` : `o ponto ${coordTexto(ponta)}`;
 
 const trechoTexto = (t: Trecho): string =>
   `entre ${postePt(t.de, t.pts[0])} e ${postePt(t.ate, t.pts[t.pts.length - 1])}, com cerca de ${metrosTexto(t.metros)} metros da ${NOME_REDE[t.tipo]}`;

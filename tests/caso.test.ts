@@ -192,7 +192,7 @@ describe('calcularCaso', () => {
 
   it('com APP confirmada em volta da água, o aviso some e a APP é a intervenção', () => {
     const acude = area('Açude Inventado', AGUA, 0, 100, 100, 200);
-    const app: AreaConfirmada = { nome: 'APP do açude', tipo: 'APP', poligono: [retangulo(-100, 0, 200, 300)], largura: 100 };
+    const app: AreaConfirmada = { nome: 'APP do açude', tipo: 'APP', poligono: [retangulo(-100, 0, 200, 300)], largura: 100, aguaId: acude.id };
     const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([acude]), [app]);
     expect(caso.avisos.map((a) => a.codigo)).not.toContain('APP_POSSIVEL');
     expect(caso.intervencoes).toHaveLength(1);
@@ -228,5 +228,78 @@ describe('calcularCaso', () => {
       }
       expect(JSON.stringify(c).toLowerCase()).not.toContain('não precisa de processo');
     }
+  });
+
+  it('poste novo sem nenhum vão novo: semRedeNova (amarelo), nunca semArea, mesmo com vão existente cruzando UC', () => {
+    const uc = area('UC Inventada', UC_ESTADUAL, 0, 0, 100, 100);
+    const r = rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)], 'existente')], [poste('p1', pt(900, 900), '1')]);
+    const caso = calcularCaso(r, base([uc]), []);
+    const codigos = caso.avisos.map((a) => a.codigo);
+    expect(codigos).toContain('SEM_REDE_NOVA');
+    expect(codigos).not.toContain('SEM_AREA');
+    expect(caso.avisos.find((a) => a.codigo === 'SEM_REDE_NOVA')?.nivel).toBe('amarelo');
+    expect(caso.avisos.find((a) => a.codigo === 'SEM_REDE_NOVA')?.texto).toBe(TEXTOS.semRedeNova);
+    expect(JSON.stringify(caso)).not.toContain('sem área protegida');
+  });
+
+  it('rio que passa por açude com APP confirmada só para o açude: o aviso do rio continua', () => {
+    const acude = area('Açude Inventado', AGUA, 0, 100, 100, 200);
+    const rio: AreaProtegida = {
+      id: ++seq, nome: 'Rio Inventado', pasta: ['Recursos Hídricos - COGERH', 'Rede Hidrográfica'], atributos: {},
+      poligonos: [], linhas: [[pt(50, 250), pt(50, 70)]], caixa: [X + 50, Y + 70, X + 50, Y + 250],
+    };
+    const app: AreaConfirmada = { nome: 'APP do açude', tipo: 'APP', poligono: [retangulo(-100, 80, 200, 300)], largura: 100, aguaId: acude.id };
+    const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([acude, rio]), [app]);
+    const av = caso.avisos.filter((a) => a.codigo === 'APP_POSSIVEL');
+    expect(av).toHaveLength(1);
+    expect(av[0].texto).toContain('Rio Inventado');
+  });
+
+  it('município incerto: o meio fora de todos usa o mais perto e avisa', () => {
+    const b = base([]);
+    b.municipios = [area('Longe', ['Municípios_CE'], 1000, 1000, 2000, 2000), area('Perto', ['Municípios_CE'], 200, 200, 300, 300)];
+    const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), b, []);
+    expect(caso.municipio).toBe('Perto');
+    const av = caso.avisos.find((a) => a.codigo === 'MUNICIPIO_INCERTO');
+    expect(av?.nivel).toBe('amarelo');
+    expect(av?.texto).toBe('O meio da rede não cai dentro de nenhum município do KMZ; confira o município da obra.');
+    expect(av?.comoCorrigir).toContain('Perto');
+  });
+
+  it('litoral vale se qualquer município a até 100 m da rede é litorâneo, mesmo com o meio em outro', () => {
+    const b = base([]);
+    b.municipios = [area('Cidade A', ['Municípios_CE'], -5000, -5000, 100, 5000), area('Caucaia', ['Municípios_CE'], 100, -5000, 5000, 5000)];
+    const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), b, []);
+    expect(caso.municipio).toBe('Cidade A');
+    expect(caso.litoral).toBe(true);
+    expect(caso.avisos.map((a) => a.codigo)).toContain('LITORAL');
+  });
+
+  it('área só de linha cruzada pela rede nova: CRUZA_LINHA, e não "não intervém"', () => {
+    const linha: AreaProtegida = {
+      id: ++seq, nome: 'Eixo Inventado', pasta: UC_ESTADUAL, atributos: {},
+      poligonos: [], linhas: [[pt(30, 0), pt(30, 100)]], caixa: [X + 30, Y, X + 30, Y + 100],
+    };
+    const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([linha]), []);
+    expect(caso.proximas).toHaveLength(0);
+    expect(caso.intervencoes).toHaveLength(0);
+    expect(caso.avisos.map((a) => a.codigo)).toEqual(['CRUZA_LINHA']);
+    expect(caso.avisos[0].texto).toBe(`Eixo Inventado: ${TEXTOS.cruzaLinha}`);
+  });
+
+  it('polígonos sobrepostos da mesma área não contam o metro duas vezes', () => {
+    const uc = area('UC Inventada', UC_ESTADUAL, 0, 0, 60, 100);
+    uc.poligonos.push([retangulo(40, 0, 100, 100)]);
+    uc.caixa = [X, Y, X + 100, Y + 100];
+    const iv = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([uc]), []).intervencoes[0];
+    expect(iv.trechos).toHaveLength(1);
+    expect(iv.metros.BT).toBeCloseTo(45, 6);
+  });
+
+  it('vão com muitos pontos não estoura a pilha', () => {
+    const uc = area('UC Inventada', UC_ESTADUAL, 0, -10, 200000, 10);
+    const pts: Pt[] = Array.from({ length: 150000 }, (_, i) => pt(i + 1, 0));
+    const caso = calcularCaso(rede([vao('a', 'BT', pts)]), base([uc]), []);
+    expect(caso.intervencoes).toHaveLength(1);
   });
 });
