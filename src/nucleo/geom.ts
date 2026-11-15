@@ -5,6 +5,7 @@ import Coordinate from 'jsts/org/locationtech/jts/geom/Coordinate.js';
 import GeometryFactory from 'jsts/org/locationtech/jts/geom/GeometryFactory.js';
 import LengthIndexedLine from 'jsts/org/locationtech/jts/linearref/LengthIndexedLine.js';
 import BoundaryOp from 'jsts/org/locationtech/jts/operation/BoundaryOp.js';
+import BufferParameters from 'jsts/org/locationtech/jts/operation/buffer/BufferParameters.js';
 import BufferOp from 'jsts/org/locationtech/jts/operation/buffer/BufferOp.js';
 import DistanceOp from 'jsts/org/locationtech/jts/operation/distance/DistanceOp.js';
 import LineMerger from 'jsts/org/locationtech/jts/operation/linemerge/LineMerger.js';
@@ -107,8 +108,12 @@ export const G = {
   uniao,
   diferenca,
   intersecao,
-  // buffer; segmentos por quadrante, padrão 4
-  engrossa: (g: Geo, d: number, segmentos = 4): Geo => (j(g).isEmpty() ? vazio() : BufferOp.bufferOp(g, d, segmentos)),
+  // buffer; segmentos por quadrante, padrão 4; ponta 'redonda' (padrão) ou 'reta' (corta na ponta da linha)
+  engrossa: (g: Geo, d: number, segmentos = 4, ponta: 'redonda' | 'reta' = 'redonda'): Geo => {
+    if (j(g).isEmpty()) return vazio();
+    if (ponta === 'redonda') return BufferOp.bufferOp(g, d, segmentos);
+    return BufferOp.bufferOp(g, d, new BufferParameters(segmentos, BufferParameters.CAP_FLAT));
+  },
   simplifica: (g: Geo, tol: number): Geo => (j(g).isEmpty() ? g : TopologyPreservingSimplifier.simplify(g, tol)),
   contorno: (g: Geo): Geo => (j(g).isEmpty() ? vazio() : BoundaryOp.getBoundary(g)),
   // linemerge

@@ -53,3 +53,19 @@ describe('G: acréscimos', () => {
     expect(G.poligonos(G.diferenca(G.caixa(0, 0, 1, 1), G.caixa(0, 0, 1, 1)))).toEqual([]);
   });
 });
+
+describe('G.engrossa: ponta', () => {
+  it('ponta reta: faixa de 6 m em volta de 100 m dá 600 m² e não passa das pontas', () => {
+    const f = G.engrossa(G.linha([[0, 0], [100, 0]]), 3, 4, 'reta');
+    expect(G.area(f)).toBeCloseTo(600, 6);
+    const [x0, , x1] = G.envelope(f);
+    expect(x0).toBeCloseTo(0, 9);
+    expect(x1).toBeCloseTo(100, 9);
+  });
+
+  it('ponta redonda (padrão) passa das pontas', () => {
+    const [x0, , x1] = G.envelope(G.engrossa(G.linha([[0, 0], [100, 0]]), 3));
+    expect(x0).toBeCloseTo(-3, 6);
+    expect(x1).toBeCloseTo(103, 6);
+  });
+});
