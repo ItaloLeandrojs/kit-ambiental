@@ -7,7 +7,7 @@ import { MUNICIPIOS_LITORAL } from '../regras/litoral.ts';
 import { TEXTOS } from '../regras/textos.ts';
 
 export interface Trecho { tipo: TipoRede; metros: number; pts: Pt[]; de: Poste | null; ate: Poste | null }
-export interface AreaConfirmada { nome: string; tipo: 'APP'; poligono: Pt[][]; largura: number; aguaId?: number } // APP aceita pelo projetista (Tarefa 8); aguaId = id da água de onde a APP veio
+export interface AreaConfirmada { nome: string; tipo: 'APP'; poligonos: Pt[][][]; largura: number; aguaId?: number } // APP aceita pelo projetista (Tarefa 8); aguaId = id da água de onde a APP veio
 export interface Intervencao {
   area: AreaProtegida | AreaConfirmada; orgao: Orgao | null;
   trechos: Trecho[]; metros: Record<TipoRede, number>; // metros sem arredondar
@@ -22,7 +22,7 @@ const RAIO_POSTE = 5; // metros: poste que marca a ponta de um trecho
 const TOL_JUNTA = 0.01; // metros: pontas que se tocam
 
 type Caixa = [number, number, number, number];
-const ehConfirmada = (a: AreaProtegida | AreaConfirmada): a is AreaConfirmada => 'poligono' in a;
+const ehConfirmada = (a: AreaProtegida | AreaConfirmada): a is AreaConfirmada => 'largura' in a;
 const cruza = (a: Caixa, b: Caixa): boolean => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 const alarga = (c: Caixa, d: number): Caixa => [c[0] - d, c[1] - d, c[2] + d, c[3] + d];
 // com laço: Math.min(...) estoura a pilha em anéis grandes
@@ -82,10 +82,12 @@ function posteDaPonta(postes: Poste[], p: Pt): Poste | null {
 interface Alvo { area: AreaProtegida | AreaConfirmada; geo: Geo | null; caixa: Caixa }
 
 function alvoDe(a: AreaProtegida | AreaConfirmada): Alvo {
-  const lista = (ehConfirmada(a) ? [a.poligono] : a.poligonos).filter(aneisValidos);
+  const lista = a.poligonos.filter(aneisValidos);
   // une os polígonos da área: polígonos sobrepostos não contam o mesmo metro duas vezes
   const geo = lista.length ? G.uniao(lista.map((an) => G.poligono(an))) : null;
-  const caixa: Caixa = ehConfirmada(a) ? (aneisValidos(a.poligono) ? caixaDePts(a.poligono[0]) : [Infinity, Infinity, -Infinity, -Infinity]) : a.caixa;
+  const caixa: Caixa = ehConfirmada(a)
+    ? caixaDePts(lista.map((an) => an[0]).flat())
+    : a.caixa;
   return { area: a, geo, caixa };
 }
 

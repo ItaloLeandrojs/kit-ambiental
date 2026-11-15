@@ -116,7 +116,7 @@ describe('calcularCaso', () => {
   });
 
   it('só poste novo dentro da APP confirmada: 2,856 m² por poste, ou o valor editado', () => {
-    const app: AreaConfirmada = { nome: 'APP de teste', tipo: 'APP', poligono: [retangulo(0, 0, 100, 100)], largura: 100 };
+    const app: AreaConfirmada = { nome: 'APP de teste', tipo: 'APP', poligonos: [[retangulo(0, 0, 100, 100)]], largura: 100 };
     const r = rede([], [poste('p1', pt(50, 50), '1')]);
     const iv = calcularCaso(r, base([]), [app]).intervencoes[0];
     expect(iv.area).toBe(app);
@@ -192,7 +192,7 @@ describe('calcularCaso', () => {
 
   it('com APP confirmada em volta da água, o aviso some e a APP é a intervenção', () => {
     const acude = area('Açude Inventado', AGUA, 0, 100, 100, 200);
-    const app: AreaConfirmada = { nome: 'APP do açude', tipo: 'APP', poligono: [retangulo(-100, 0, 200, 300)], largura: 100, aguaId: acude.id };
+    const app: AreaConfirmada = { nome: 'APP do açude', tipo: 'APP', poligonos: [[retangulo(-100, 0, 200, 300)]], largura: 100, aguaId: acude.id };
     const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([acude]), [app]);
     expect(caso.avisos.map((a) => a.codigo)).not.toContain('APP_POSSIVEL');
     expect(caso.intervencoes).toHaveLength(1);
@@ -248,7 +248,7 @@ describe('calcularCaso', () => {
       id: ++seq, nome: 'Rio Inventado', pasta: ['Recursos Hídricos - COGERH', 'Rede Hidrográfica'], atributos: {},
       poligonos: [], linhas: [[pt(50, 250), pt(50, 70)]], caixa: [X + 50, Y + 70, X + 50, Y + 250],
     };
-    const app: AreaConfirmada = { nome: 'APP do açude', tipo: 'APP', poligono: [retangulo(-100, 80, 200, 300)], largura: 100, aguaId: acude.id };
+    const app: AreaConfirmada = { nome: 'APP do açude', tipo: 'APP', poligonos: [[retangulo(-100, 80, 200, 300)]], largura: 100, aguaId: acude.id };
     const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([acude, rio]), [app]);
     const av = caso.avisos.filter((a) => a.codigo === 'APP_POSSIVEL');
     expect(av).toHaveLength(1);

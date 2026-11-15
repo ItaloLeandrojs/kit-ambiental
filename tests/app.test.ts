@@ -27,6 +27,7 @@ const vao = (pts: Pt[]): Vao => ({ id: 'v', pts, camada: 'C', tipo: 'MT', situac
 const rede = (vaos: Vao[], postes: Poste[] = []): Rede => ({ origem: 'dxf', vaos, postes });
 const base = (areas: AreaProtegida[]): BaseAreas => ({ revisao: 'teste', data: '', areas, municipios: [] });
 const ring = (aneis: Pt[][]): number => G.area(G.poligono(aneis));
+const total = (ps: Pt[][][]): number => ps.reduce((s, a) => s + ring(a), 0);
 
 // açude quadrado de 200 m (0 a 200) e rede vertical em x = 260, a 60 m da margem
 const AC = acude('Açude Inventado', 0, 0, 200, 200);
@@ -39,16 +40,23 @@ describe('proporApps', () => {
     const app = apps[0];
     expect(app.agua).toBe(AC);
     expect(app.largura).toBe(LARGURA_APP.acude);
-    expect(app.poligono).toHaveLength(2); // anel externo + furo do açude
+    expect(app.poligonos).toHaveLength(1);
+    expect(app.poligonos[0]).toHaveLength(2); // anel externo + furo do açude
     // buffer de 100 m de um quadrado de lado L, menos o quadrado = 4·L·d + π·d² (quinas arredondadas)
     const esperado = 4 * 200 * 100 + Math.PI * 100 * 100;
-    expect(ring(app.poligono)).toBeGreaterThan(esperado * 0.98);
-    expect(ring(app.poligono)).toBeLessThan(esperado * 1.02);
+    expect(total(app.poligonos)).toBeGreaterThan(esperado * 0.98);
+    expect(total(app.poligonos)).toBeLessThan(esperado * 1.02);
     expect(app.porque).toContain('a licença do açude pode dizer outra largura');
   });
 
   it('não propõe para água a mais de largura da rede nova', () => {
     expect(proporApps(rede([vao([pt(400, 0), pt(400, 200)])]), base([AC]))).toEqual([]);
+  });
+
+  it('água a 31-100 m da rede nova ainda recebe proposta, com a largura padrão do rio', () => {
+    const r = rio('Rio Inventado', [pt(0, 100), pt(200, 100)]);
+    const [app] = proporApps(rede([vao([pt(100, 160), pt(100, 200)])]), base([r])); // a 60 m do rio
+    expect(app.largura).toBe(30);
   });
 
   it('sem rede nova não propõe nada', () => {
@@ -68,9 +76,9 @@ describe('proporApps', () => {
     expect(app.largura).toBe(30);
     // linha de 200 m com 30 m de cada lado: 200·60 mais as duas pontas redondas (π·30²)
     const esperado = 200 * 60 + Math.PI * 30 * 30;
-    expect(ring(app.poligono)).toBeGreaterThan(esperado * 0.98);
-    expect(ring(app.poligono)).toBeLessThan(esperado * 1.02);
-    const meio = G.poligono(app.poligono);
+    expect(total(app.poligonos)).toBeGreaterThan(esperado * 0.98);
+    expect(total(app.poligonos)).toBeLessThan(esperado * 1.02);
+    const meio = G.poligono(app.poligonos[0]);
     expect(G.distancia(meio, G.ponto(pt(100, 129)))).toBe(0);
     expect(G.distancia(meio, G.ponto(pt(100, 71)))).toBe(0);
     expect(G.distancia(meio, G.ponto(pt(100, 135)))).toBeGreaterThan(0);
@@ -79,9 +87,9 @@ describe('proporApps', () => {
   it('recorta à caixa da rede + 500 m: rio de 300 km não gera 300 km de margem', () => {
     const r = rio('Rio Longo', [pt(-150000, 100), pt(150000, 100)]);
     const apps = proporApps(rede([vao([pt(0, 80), pt(0, 120)])]), base([r]));
-    const total = apps.reduce((s, a) => s + ring(a.poligono), 0);
-    expect(total).toBeLessThan(1100 * 60 * 1.01); // caixa de ±500 m em volta da rede: no máximo 1100 m de rio
-    for (const a of apps) for (const p of a.poligono[0]) expect(Math.abs(p[0] - X)).toBeLessThanOrEqual(500.0001);
+    expect(apps).toHaveLength(1);
+    expect(total(apps[0].poligonos)).toBeLessThan(1100 * 60 * 1.01); // caixa de ±500 m em volta da rede: no máximo 1100 m de rio
+    for (const parte of apps[0].poligonos) for (const p of parte[0]) expect(Math.abs(p[0] - X)).toBeLessThanOrEqual(500.0001);
   });
 });
 
@@ -91,19 +99,46 @@ describe('refazerApp', () => {
     const nova = refazerApp(app, 50);
     expect(nova.largura).toBe(50);
     expect(nova.agua).toBe(AC);
-    expect(ring(nova.poligono)).toBeLessThan(ring(app.poligono));
-    expect(G.distancia(G.poligono(nova.poligono), G.linha(REDE.vaos[0].pts))).toBeGreaterThan(5);
+    expect(total(nova.poligonos)).toBeLessThan(total(app.poligonos));
+    expect(G.distancia(G.poligono(nova.poligonos[0]), G.linha(REDE.vaos[0].pts))).toBeGreaterThan(5);
+  });
+});
+
+describe('APP em várias partes', () => {
+  // rio em U: duas pernas dentro da caixa, a volta fica fora; a APP vira duas partes
+  const U = rio('Rio em U', [pt(0, 100), pt(0, 2000), pt(100, 2000), pt(100, 100)]);
+  const r = rede([vao([pt(60, 300), pt(120, 300)])]); // cruza a segunda perna (x de 70 a 130)
+
+  it('uma proposta por água, com as duas partes', () => {
+    const apps = proporApps(r, base([U]));
+    expect(apps).toHaveLength(1);
+    expect(apps[0].poligonos).toHaveLength(2);
+    expect(refazerApp(apps[0], 40).poligonos).toHaveLength(2);
+  });
+
+  it('sem confirmar o APP_POSSIVEL fica; confirmada, o cruzamento da segunda parte é intervenção na APP', () => {
+    const b = base([U]);
+    expect(calcularCaso(r, b, []).avisos.map((a) => a.codigo)).toContain('APP_POSSIVEL');
+    const caso = calcularCaso(r, b, [confirmarApp(proporApps(r, b)[0])]);
+    expect(caso.avisos.map((a) => a.codigo)).not.toContain('APP_POSSIVEL');
+    expect(caso.intervencoes).toHaveLength(1);
+    expect(caso.intervencoes[0].metros.MT).toBeCloseTo(50, 6);
   });
 });
 
 describe('confirmarApp', () => {
+  it('APP vazia não pode ser confirmada', () => {
+    const [app] = proporApps(REDE, base([AC]));
+    expect(() => confirmarApp({ ...app, poligonos: [] })).toThrow('A APP ficou vazia. Aumente a largura e tente de novo.');
+  });
+
   it('dá o nome "APP <nome>", o tipo, a largura, o polígono e o aguaId', () => {
     const [app] = proporApps(REDE, base([AC]));
     const c = confirmarApp(app);
     expect(c.nome).toBe('APP Açude Inventado');
     expect(c.tipo).toBe('APP');
     expect(c.largura).toBe(100);
-    expect(c.poligono).toEqual(app.poligono);
+    expect(c.poligonos).toEqual(app.poligonos);
     expect(c.aguaId).toBe(AC.id);
   });
 

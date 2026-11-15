@@ -37,7 +37,7 @@ describe('resumoTexto', () => {
   });
 
   it('só poste novo na APP confirmada', () => {
-    const app: AreaConfirmada = { nome: 'APP inventada', tipo: 'APP', poligono: [anel(500000, 9500000, 500100, 9500100)], largura: 100 };
+    const app: AreaConfirmada = { nome: 'APP inventada', tipo: 'APP', poligonos: [[anel(500000, 9500000, 500100, 9500100)]], largura: 100 };
     const r: Rede = { origem: 'dxf', vaos: [], postes: [{ id: 'p1', ponto: [500050, 9500050], numero: '1', novo: true, coordEscrita: null, etiqueta: null }] };
     const t = resumoTexto(calcularCaso(r, base([]), [app]), '');
     expect(t).toContain('A intervenção ocorrerá com 1 poste novo, sem rede nova na área, com área de 0,0002856 ha, dentro de APP inventada.');

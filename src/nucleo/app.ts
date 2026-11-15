@@ -5,12 +5,12 @@ import type { AreaConfirmada } from './caso.ts';
 import { redeNova } from './rede.ts';
 import type { Rede } from './tipos.ts';
 import { G, type Geo } from './geom.ts';
-import { LARGURA_APP } from '../regras/faixas.ts';
+import { LARGURA_APP, RAIO_PROXIMA } from '../regras/faixas.ts';
 
 type Caixa = [number, number, number, number];
 
-// `caixa` (fora do contrato do plano) guarda o recorte da rede + 500 m, para refazerApp refazer igual sem receber a rede
-export interface AppProposta { agua: AreaProtegida; largura: number; poligono: Pt[][]; porque: string; caixa?: Caixa }
+// `caixa` guarda o recorte (rede + 500 m), para refazerApp refazer igual sem receber a rede; `poligonos` são todas as partes da APP
+export interface AppProposta { agua: AreaProtegida; largura: number; poligonos: Pt[][][]; porque: string; caixa: Caixa }
 
 const MARGEM_CAIXA = 500; // metros em volta da rede nova: não gera a margem de um rio de 300 km
 
@@ -47,50 +47,40 @@ function caixaDaRede(rede: Rede): Caixa {
 }
 
 // polígonos da APP: água em polígono = buffer menos a água; rio em linha = buffer; tudo recortado à caixa
-function geometriaApp(agua: AreaProtegida, largura: number, caixa: Caixa | undefined): Pt[][][] {
+function geometriaApp(agua: AreaProtegida, largura: number, caixa: Caixa): Pt[][][] {
   const g = geoDaAgua(agua);
   const grosso = G.engrossa(g, largura);
   const faixa = agua.poligonos.length ? G.diferenca(grosso, g) : grosso;
-  return G.poligonos(caixa ? G.intersecao(faixa, G.caixa(...caixa)) : faixa);
+  return G.poligonos(G.intersecao(faixa, G.caixa(...caixa)));
 }
 
-const areaDe = (aneis: Pt[][]): number => G.area(G.poligono(aneis));
-const porqueDe = (tipo: 'acude' | 'lagoa' | 'rio'): string => PORQUE[tipo];
-
-// Um polígono por proposta. Se o recorte à caixa separar a APP em partes (rio que sai e volta, por exemplo),
-// sai uma proposta para cada parte: nenhuma parte é jogada fora.
+// Uma proposta por água, com TODAS as partes da APP (o recorte à caixa pode partir a faixa de um rio em várias).
+// Propõe para toda água a até RAIO_PROXIMA da rede nova, com a largura padrão; o projetista alarga se precisar.
 export function proporApps(rede: Rede, base: BaseAreas): AppProposta[] {
   const alvos = geosDaRede(rede);
-  if (redeNova(rede).length === 0 && alvos.length === 0) return [];
+  if (alvos.length === 0) return [];
   const caixa = caixaDaRede(rede);
   const out: AppProposta[] = [];
   for (const agua of base.areas) {
     const tipo = ehAgua(agua);
     if (tipo === null) continue;
-    const largura = LARGURA_APP[tipo];
     const g = geoDaAgua(agua);
-    if (Math.min(Infinity, ...alvos.map((r) => G.distancia(r, g))) > largura) continue;
-    for (const poligono of geometriaApp(agua, largura, caixa)) {
-      out.push({ agua, largura, poligono, porque: porqueDe(tipo), caixa });
-    }
+    if (Math.min(...alvos.map((r) => G.distancia(r, g))) > RAIO_PROXIMA) continue;
+    const largura = LARGURA_APP[tipo];
+    out.push({ agua, largura, poligonos: geometriaApp(agua, largura, caixa), porque: PORQUE[tipo], caixa });
   }
   return out;
 }
 
-// refaz com outra largura; se a APP tinha várias partes, devolve a que mais se sobrepõe à anterior
+// refaz todas as partes com outra largura
 export function refazerApp(p: AppProposta, largura: number): AppProposta {
-  const tipo = ehAgua(p.agua);
-  const partes = geometriaApp(p.agua, largura, p.caixa);
-  const antiga = G.poligono(p.poligono);
-  let melhor: Pt[][] = [];
-  let pontos = -1;
-  for (const parte of partes) {
-    const s = G.area(G.intersecao(antiga, G.poligono(parte)));
-    if (s > pontos || (s === pontos && areaDe(parte) > areaDe(melhor))) { melhor = parte; pontos = s; }
-  }
-  return { ...p, largura, poligono: melhor, porque: tipo ? porqueDe(tipo) : p.porque };
+  return { ...p, largura, poligonos: geometriaApp(p.agua, largura, p.caixa) };
 }
 
-export const confirmarApp = (p: AppProposta): AreaConfirmada => ({
-  nome: `APP ${p.agua.nome}`, tipo: 'APP', poligono: p.poligono, largura: p.largura, aguaId: p.agua.id,
-});
+// APP sem área não pode ser aceita: apagaria o aviso sem proteger nada
+export function confirmarApp(p: AppProposta): AreaConfirmada {
+  if (!p.poligonos.some((aneis) => G.area(G.poligono(aneis)) > 0)) {
+    throw new Error('A APP ficou vazia. Aumente a largura e tente de novo.');
+  }
+  return { nome: `APP ${p.agua.nome}`, tipo: 'APP', poligonos: p.poligonos, largura: p.largura, aguaId: p.agua.id };
+}
