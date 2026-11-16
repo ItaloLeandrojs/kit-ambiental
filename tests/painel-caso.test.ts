@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { criarEstado, type Estado } from '../src/tela/estado.ts';
+import { criarEstado, ERRO_AVISO_VERMELHO, type Estado } from '../src/tela/estado.ts';
 import { criarPainel } from '../src/tela/painel.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import type { Pt } from '../src/nucleo/tipos.ts';
@@ -255,6 +255,40 @@ describe('painel: avisos e documentos', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(passo(7).textContent).toContain('Este zip só tem a parte espacial (KML e SHP). Junte memorial, ART, CVT, planta e projeto antes de mandar ao órgão.');
     expect(passo(7).querySelector('.item.vermelho')).not.toBeNull();
+  });
+});
+
+describe('painel: avisos da rede no caso', () => {
+  it('sem rede nova: o vermelho aparece no passo 5, conta para conferir, vai ao resumo e trava o baixar', async () => {
+    await noCaso();
+    estado.marcarVao(estado.ler().rede!.vaos[0].id, { situacao: 'existente' });
+    expect(estado.ler().caso!.avisos.map((a) => a.codigo)).toEqual(['SEM_REDE_NOVA']);
+    expect(passo(5).hasAttribute('open')).toBe(true);
+    const p5 = passo(5);
+    expect([...p5.querySelectorAll('.aviso.vermelho .cod')].map((c) => c.textContent)).toEqual(['SEM_REDE_NOVA']);
+    expect(p5.querySelector('.pilula.am')!.textContent).toBe('1 avisos para conferir');
+    expect(p5.querySelector('.resumo-txt')!.textContent).toContain('Aviso: Nenhuma rede nova marcada.');
+    clicarPasso(6);
+    expect(botao('Baixar KML e SHP').disabled).toBe(true);
+    expect(botao('Abrir no Google Earth').disabled).toBe(true);
+    expect(passo(6).textContent).toContain(ERRO_AVISO_VERMELHO);
+    expect(passo(6).querySelector('summary')!.textContent).toContain('resolva os avisos vermelhos antes');
+    expect(() => estado.baixarPacote()).toThrow(ERRO_AVISO_VERMELHO);
+    expect(() => estado.baixarGoogleEarth()).toThrow(ERRO_AVISO_VERMELHO);
+  });
+
+  it('vão novo sem tipo: aparece no passo 5 e no resumo, e trava o baixar até ganhar tipo', async () => {
+    await noCaso();
+    const id = estado.ler().rede!.vaos[0].id;
+    estado.marcarVao(id, { tipo: null });
+    expect([...passo(5).querySelectorAll('.aviso.vermelho .cod')].map((c) => c.textContent)).toContain('VAO_SEM_TIPO');
+    expect(passo(5).textContent).toContain('1 vão novo sem tipo ficou fora da conta');
+    expect(passo(5).querySelector('.resumo-txt')!.textContent).toContain('Aviso: 1 vão novo sem tipo ficou fora da conta');
+    clicarPasso(6);
+    expect(botao('Baixar KML e SHP').disabled).toBe(true);
+    estado.marcarVao(id, { tipo: 'MT' });
+    estado.confirmarApp(0, 100);
+    expect(botao('Baixar KML e SHP').disabled).toBe(false);
   });
 });
 

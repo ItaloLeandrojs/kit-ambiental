@@ -10,7 +10,7 @@ import { coordTexto, haTexto, metrosTexto } from '../nucleo/formato.ts';
 import { resumoTexto } from '../nucleo/resumo.ts';
 import { LARGURA_APP, M2_POSTE_SEM_REDE } from '../regras/faixas.ts';
 import { PORQUE_AVISO } from '../regras/textos.ts';
-import { contaNaRede, ERRO_APP_PENDENTE, ERRO_ARVORE_SEM_PONTO, osValida, type AppDoCaso, type Estado, type Retrato } from './estado.ts';
+import { contaNaRede, ERRO_APP_PENDENTE, ERRO_ARVORE_SEM_PONTO, ERRO_AVISO_VERMELHO, osValida, type AppDoCaso, type Estado, type Retrato } from './estado.ts';
 import { SITUACAO_TEXTO, TIPO_TEXTO } from './mapa.ts';
 
 type Filho = Node | string | null | false | undefined;
@@ -39,7 +39,7 @@ const PASSOS = [
   { n: 6, titulo: 'Baixar' },
   { n: 7, titulo: 'Conferir um zip' },
 ] as const;
-const AVISOS_DA_REDE = new Set(['POSTE_A_CONFIRMAR', 'SEM_REDE_NOVA']); // aparecem no passo 3, não no 5
+const AVISOS_DA_REDE = new Set(['POSTE_A_CONFIRMAR', 'SEM_REDE_NOVA', 'VAO_SEM_TIPO']); // aparecem no passo 3 e de novo no 5
 // avisos das árvores que vão ao memorial: aparecem também no passo 5 e no resumo
 const AVISOS_ARVORE_NO_CASO = new Set(['ARVORE_CARNAUBA', 'ARVORE_SEM_ESPECIE']);
 const ERRO_M2_TELA = 'Os m² do poste precisam ser um número, zero ou maior.';
@@ -279,7 +279,10 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       return [`${r.arvores.length} ${r.arvores.length === 1 ? 'árvore' : 'árvores'}`, `${podas} poda${podas === 1 ? '' : 's'}`, `${sup} ${sup === 1 ? 'supressão' : 'supressões'}`, lim ? `${lim} limpeza${lim === 1 ? '' : 's'} de faixa` : ''].filter(Boolean).join(' · ');
     }
     if (n === 5 && r.caso) return `${r.caso.intervencoes.length} áreas cruzadas · ${r.caso.avisos.length + r.avisosFaixa.length} avisos`;
-    if (n === 6 && r.caso) return r.appsPendentes > 0 ? 'responda as APPs antes' : 'KML e SHP prontos';
+    if (n === 6 && r.caso) {
+      if (r.caso.avisos.some((a) => a.nivel === 'vermelho')) return 'resolva os avisos vermelhos antes';
+      return r.appsPendentes > 0 ? 'responda as APPs antes' : 'KML e SHP prontos';
+    }
     if (n === 7 && conferencia) {
       const v = conferencia.itens.filter((i) => i.nivel === 'vermelho').length;
       const a = conferencia.itens.filter((i) => i.nivel === 'amarelo').length;
@@ -408,7 +411,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
         h('tr', {}, h('td', { colspan: 4 }, `Rede nova (${rede.vaos.length} vãos no total)`)),
         h('tr', {}, h('td', { colspan: 4, class: 'sub' },
           `MT ${metrosTexto(t.MT)} m · BT ${metrosTexto(t.BT)} m · conjugada ${metrosTexto(t.CONJ)} m`)))),
-      t.semTipo ? h('p', { class: 'amarelo-txt' }, `${t.semTipo} ${t.semTipo === 1 ? 'vão novo está' : 'vãos novos estão'} sem tipo (tracejado amarelo no mapa) e ficam fora da conta. Clique para escolher MT, BT ou conjugada.`) : null,
+      t.semTipo && !doCaso.some((a) => a.codigo === 'VAO_SEM_TIPO') ? h('p', { class: 'amarelo-txt' }, `${t.semTipo} ${t.semTipo === 1 ? 'vão novo está' : 'vãos novos estão'} sem tipo (tracejado amarelo no mapa) e ficam fora da conta. Clique para escolher MT, BT ou conjugada.`) : null,
       h('div', { class: 'legenda', role: 'group', 'aria-label': 'Cores no mapa' },
         h('span', {}, h('i', { class: 'c-mt' }), 'MT (média tensão)'),
         h('span', {}, h('i', { class: 'c-bt' }), 'BT (baixa tensão)'),
@@ -556,7 +559,8 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const cobertoPorCartao = (a: Aviso): boolean =>
       a.codigo === 'APP_POSSIVEL' && nomesComCartao.some((n) => a.texto.startsWith(`Rede nova a menos de 100 m de ${n}.`));
     const daArvore = r.avisosArvores.filter((a) => AVISOS_ARVORE_NO_CASO.has(a.codigo));
-    const outros = [...caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !cobertoPorCartao(a)), ...daArvore, ...r.avisosEmArea, ...r.avisosFaixa];
+    // os avisos da rede (sem rede nova, vão sem tipo, poste a confirmar) aparecem aqui também: o caso não pode parecer limpo
+    const outros = [...caso.avisos.filter((a) => !cobertoPorCartao(a)), ...daArvore, ...r.avisosEmArea, ...r.avisosFaixa];
     const linhaDasArvores = linhaArvores(r.arvores, r.limpeza);
     const texto = resumoTexto(caso, r.projeto?.os ?? '', [...(linhaDasArvores ? [linhaDasArvores] : []), ...[...daArvore, ...r.avisosEmArea, ...r.avisosFaixa].map((a) => `Aviso: ${a.texto}`)]);
     const paraConferir = outros.length + r.appsPendentes;
@@ -589,8 +593,10 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
   }
 
   function passo6(r: Retrato): Filho[] {
-    const travado = r.appsPendentes > 0 || r.arvoresSemPonto > 0;
+    const vermelhoNoCaso = !!r.caso?.avisos.some((a) => a.nivel === 'vermelho');
+    const travado = vermelhoNoCaso || r.appsPendentes > 0 || r.arvoresSemPonto > 0;
     return [
+      vermelhoNoCaso ? h('p', { class: 'erro', role: 'alert' }, ERRO_AVISO_VERMELHO) : null,
       r.appsPendentes > 0 ? h('p', { class: 'amarelo-txt', role: 'status' }, ERRO_APP_PENDENTE) : null,
       r.arvoresSemPonto > 0 ? h('p', { class: 'erro', role: 'alert' }, ERRO_ARVORE_SEM_PONTO) : null,
       erroBaixar ? h('p', { class: 'erro', role: 'alert' }, erroBaixar) : null,

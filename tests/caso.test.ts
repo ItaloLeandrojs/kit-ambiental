@@ -254,6 +254,30 @@ describe('calcularCaso', () => {
     expect(caso.intervencoes[0].hectares).toBeCloseTo(0.0002856, 10);
   });
 
+  it('vão novo sem tipo: vermelho VAO_SEM_TIPO dizendo quantos ficaram fora da conta', () => {
+    const uc = area('UC Inventada', UC_ESTADUAL, 0, 0, 100, 100);
+    const semTipo = (id: string, pts: Pt[]): Vao => ({ id, pts, camada: 'C', tipo: null, situacao: 'novo', motivo: '' });
+    const r = rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)]), semTipo('b', [pt(55, 50), pt(90, 50)]), semTipo('c', [pt(90, 50), pt(95, 50)])]);
+    const caso = calcularCaso(r, base([uc]), []);
+    const aviso = caso.avisos.find((a) => a.codigo === 'VAO_SEM_TIPO');
+    expect(aviso?.nivel).toBe('vermelho');
+    expect(aviso?.texto).toBe(`2 vãos novos sem tipo ficaram ${TEXTOS.vaosSemTipo}`);
+    expect(caso.intervencoes[0].metros.BT).toBeCloseTo(45, 6); // os sem tipo seguem fora da conta
+    // vão existente sem tipo não conta: não é rede nova
+    const existente = rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)]), { ...semTipo('b', [pt(55, 50), pt(90, 50)]), situacao: 'existente' }]);
+    expect(calcularCaso(existente, base([uc]), []).avisos.map((a) => a.codigo)).not.toContain('VAO_SEM_TIPO');
+  });
+
+  it('só vãos sem tipo e ponto sem nome (KML sem MT/BT no nome): o vermelho não some', () => {
+    const p: Poste = { ...poste('p1', pt(500, 500)), aConfirmar: true };
+    const r = rede([{ id: 'b', pts: [pt(10, 50), pt(55, 50)], camada: 'C', tipo: null, situacao: 'novo', motivo: '' }], [p]);
+    const caso = calcularCaso(r, base([]), []);
+    expect(caso.avisos.filter((a) => a.nivel === 'vermelho').map((a) => a.codigo)).toEqual(['VAO_SEM_TIPO']);
+    // sem poste também: SEM_REDE_NOVA e VAO_SEM_TIPO, os dois vermelhos
+    const soVao = calcularCaso({ ...r, postes: [] }, base([]), []);
+    expect(soVao.avisos.map((a) => [a.codigo, a.nivel])).toEqual([['SEM_REDE_NOVA', 'vermelho'], ['VAO_SEM_TIPO', 'vermelho']]);
+  });
+
   it('poste com prova (do DXF ou com POSTE no nome): sem POSTE_A_CONFIRMAR', () => {
     const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])], [poste('p1', pt(10, 50))]), base([]), []);
     expect(caso.avisos.map((a) => a.codigo)).not.toContain('POSTE_A_CONFIRMAR');

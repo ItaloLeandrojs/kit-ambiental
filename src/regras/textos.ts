@@ -21,6 +21,8 @@ export const TEXTOS = {
   faixaSemMalhaSop: 'Carregue a malha SOP para conferir a faixa de domínio',
   // provisório: texto a confirmar com o Italo
   faixaFerrovia: 'precisa de processo da ferrovia',
+  // provisório: texto a confirmar com o Italo (vem depois de "N vãos novos sem tipo ficaram")
+  vaosSemTipo: 'fora da conta: não entram nos metros, nos hectares nem no kit',
   // provisório: texto a confirmar com o Italo
   faixaSemFerrovia: 'Faixa de ferrovia não conferida: carregue a malha de ferrovia',
 } as const;
@@ -31,6 +33,7 @@ export const PORQUE_AVISO: Record<string, string> = {
   MUNICIPIO_INCERTO: 'O município define quem licencia em alguns casos.',
   POSTE_A_CONFIRMAR: 'Um poste a mais ou a menos muda a área e a conta do caso.',
   SEM_REDE_NOVA: 'Sem rede nova marcada, o site não tem o que cruzar com as áreas protegidas.',
+  VAO_SEM_TIPO: 'Sem o tipo (MT, BT ou conjugada) o site não sabe a faixa do vão: a rede some da conta e o kit sai sem ela.',
   APP_POSSIVEL: 'Obra dentro da APP pode exigir processo. APP só se confirma em campo.',
   PROXIMA: 'Não há intervenção, mas o órgão quer saber que você olhou.',
   LITORAL: 'Duna, restinga e beira-mar têm proteção própria e podem exigir processo.',

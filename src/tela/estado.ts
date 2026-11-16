@@ -108,6 +108,7 @@ export interface Estado {
 export const ERRO_OS = 'A OS tem 10 dígitos, com os zeros da frente.';
 export const ERRO_APP_PENDENTE = 'Responda as APPs propostas antes de baixar';
 export const ERRO_ARVORE_SEM_PONTO = 'Marque no mapa as árvores sem posição antes de baixar';
+export const ERRO_AVISO_VERMELHO = 'Resolva os avisos vermelhos do caso antes de baixar';
 export const ERRO_LIMPEZA_CURTA = 'A limpeza de faixa precisa de pelo menos 3 cantos. Clique os cantos no mapa e feche com duplo clique.';
 export const ERRO_SEM_CASO = 'Falta o caso: abra o KMZ e o projeto, e resolva os avisos vermelhos.';
 export const ERRO_LARGURA = 'A largura da APP precisa ser um número maior que zero, em metros.';
@@ -229,6 +230,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
 
   function prontoParaBaixar() {
     if (!rede || !base || !caso || !projeto) throw new Error(ERRO_SEM_CASO);
+    if (caso.avisos.some((a) => a.nivel === 'vermelho')) throw new Error(ERRO_AVISO_VERMELHO);
     if (apps.some((a) => a.resposta === 'pendente')) throw new Error(ERRO_APP_PENDENTE);
     if (arvores.some((a) => a.ponto === null)) throw new Error(ERRO_ARVORE_SEM_PONTO);
     return { os: projeto.os, cs: montarCamadas(projeto.os, caso, rede, camadasArvores(projeto.os, arvores, limpeza), base) };

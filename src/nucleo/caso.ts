@@ -97,6 +97,13 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
   const novos: Vao[] = redeNova(rede);
   const postesNovos = rede.postes.filter((p) => p.novo);
   const semVao = novos.length === 0;
+  // vão novo sem tipo fica fora da conta: vermelho, para a rede não sumir do kit em silêncio
+  const nSemTipo = rede.vaos.filter((v) => v.situacao === 'novo' && v.tipo === null).length;
+  const semTipo: Aviso[] = nSemTipo === 0 ? [] : [{
+    nivel: 'vermelho', codigo: 'VAO_SEM_TIPO',
+    texto: `${nSemTipo === 1 ? '1 vão novo sem tipo ficou' : `${nSemTipo} vãos novos sem tipo ficaram`} ${TEXTOS.vaosSemTipo}`,
+    comoCorrigir: 'No passo 3, clique em cada vão tracejado em amarelo (no mapa ou na coluna Tipo) e escolha MT, BT ou conjugada; se não for rede nova, marque como fora.',
+  }];
   if (semVao && postesNovos.length === 0) {
     // sem rede nova não se cruza nada: dizer "sem área protegida" aqui seria falso verde
     return {
@@ -104,7 +111,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
       avisos: [{
         nivel: 'vermelho', codigo: 'SEM_REDE_NOVA', texto: TEXTOS.semRedeNova,
         comoCorrigir: 'No mapa, clique nos vãos que são rede nova e marque cada um como novo (1).',
-      }],
+      }, ...semTipo],
     };
   }
 
@@ -164,6 +171,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
       comoCorrigir: 'Há poste novo mas nenhum vão marcado como novo; no mapa, marque os vãos que são rede nova (1), se houver.',
     });
   }
+  avisos.push(...semTipo);
   const aConfirmar = postesNovos.filter((p) => p.aConfirmar).length;
   if (aConfirmar > 0) {
     avisos.push({
