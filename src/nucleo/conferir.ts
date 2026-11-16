@@ -312,6 +312,16 @@ export function conferirZip(bytes: Uint8Array, dxf?: Uint8Array): ItemConferenci
   if (!unifShp) itens.push(item('vermelho', 'UNIFICADO', 'Falta o shapefile unificado', 'O órgão pede um shapefile com todas as camadas juntas, chamado UNIFICADO.', 'Junte as camadas num shapefile com UNIFICADO no nome, na pasta SHAPEFILE.'));
   if (unifKml && unifShp) itens.push(verde('UNIFICADO', 'Unificado nos dois formatos', 'Tem o KML e o shapefile UNIFICADO.'));
 
+  // ---- SEPARADOS: além do unificado, uma camada por coisa (desenho §6.6) ----
+  const separadas = new Set([...kmls.map((k) => k.norm), ...shps.filter((x) => x.arquivos.shp).map((x) => x.norm)].filter((n) => !ehUnificado(n)));
+  if (separadas.size === 0) {
+    itens.push(item('vermelho', 'SEPARADOS', 'Faltam as camadas separadas',
+      'O órgão pede, além do UNIFICADO, uma camada por coisa (rede, postes, área, APP), em KML e em shapefile. Só com o unificado ele não confere cada camada.',
+      'Junte ao zip as camadas separadas (KML e shapefile de cada uma), como o site grava no passo 6.'));
+  } else {
+    itens.push(verde('SEPARADOS', 'Camadas separadas', `Além do unificado, o zip tem ${separadas.size} ${separadas.size === 1 ? 'camada' : 'camadas'}.`));
+  }
+
   // ---- PRJ ----
   let prjRuins = 0;
   for (const s of shps) {

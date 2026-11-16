@@ -62,7 +62,7 @@ describe('conferirZip: kit inventado bom', () => {
     expect(codigos(r, 'amarelo')).toEqual([]);
   });
   it('as regras todas aparecem em verde', () => {
-    expect(new Set(codigos(r, 'verde'))).toEqual(new Set(['SHP_INCOMPLETO', 'PAR', 'UNIFICADO', 'PRJ', 'NO_LUGAR', 'TIPO', 'COMPRIMENTO', 'DOCUMENTOS']));
+    expect(new Set(codigos(r, 'verde'))).toEqual(new Set(['SHP_INCOMPLETO', 'PAR', 'UNIFICADO', 'SEPARADOS', 'PRJ', 'NO_LUGAR', 'TIPO', 'COMPRIMENTO', 'DOCUMENTOS']));
   });
   it('todo item tem texto próprio, sem travessão', () => {
     for (const i of r) {
@@ -127,6 +127,18 @@ describe('conferirZip: cópias estragadas, uma por teste', () => {
     const shpVazio = conferirZip(montarZip(trocar(trocar(base, `${OS} SHAPEFILE/${OS} POSTES.shp`, g.shp), `${OS} SHAPEFILE/${OS} POSTES.shx`, g.shx)));
     expect(vermelhos(shpVazio)).toContain('NO_LUGAR');
     expect(codigos(shpVazio, 'verde')).not.toContain('NO_LUGAR');
+  });
+
+  it('só o unificado, sem as camadas separadas: SEPARADOS vermelho', () => {
+    const r = conferirZip(montarZip(base.filter((a) => /UNIFICADO/.test(a.caminho) || !/\.(kml|shp|shx|dbf|prj|cpg)$/.test(a.caminho))));
+    const it = r.find((i) => i.codigo === 'SEPARADOS');
+    expect(it?.nivel).toBe('vermelho');
+    expect(it?.titulo).toBe('Faltam as camadas separadas');
+    expect(codigos(r, 'verde')).toContain('UNIFICADO');
+  });
+
+  it('kit bom: SEPARADOS verde', () => {
+    expect(codigos(conferirZip(montarZip(base)), 'verde')).toContain('SEPARADOS');
   });
 
   it('sem o unificado: UNIFICADO nos dois formatos', () => {
