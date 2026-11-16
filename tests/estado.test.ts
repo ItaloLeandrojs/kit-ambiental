@@ -366,8 +366,9 @@ describe('estado: malhas de faixa de domínio', () => {
     expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA']);
     await e.carregarMalha(bytesDe('x'), 'SOP.kml', 'SOP');
     expect(e.ler().malhas.map((m) => m.tipo)).toEqual(['SOP']);
-    expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_DOMINIO']);
-    expect(e.ler().avisosFaixa[0].texto).toContain('CE-999');
+    expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA', 'FAIXA_DOMINIO']); // falta a DNIT
+    expect(e.ler().avisosFaixa[0].texto).toBe('Carregue a malha DNIT para conferir a faixa de domínio');
+    expect(e.ler().avisosFaixa[1].texto).toContain('CE-999');
   });
 
   it('a malha fica no armazém e volta na próxima visita; trocar do mesmo tipo substitui', async () => {

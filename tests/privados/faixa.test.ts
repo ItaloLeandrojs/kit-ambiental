@@ -2,7 +2,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PRIVADOS } from './caminhos.ts';
-import { lerMalha, type Malha } from '../../src/nucleo/faixa.ts';
+import { avisosFaixa, lerMalha, type Malha } from '../../src/nucleo/faixa.ts';
+import { abrirZip } from '../../src/nucleo/zip.ts';
+import { lerKml } from '../../src/nucleo/kml.ts';
+import { proporRedeKml } from '../../src/nucleo/rede.ts';
 import { deUtm } from '../../src/nucleo/utm.ts';
 
 const DNIT = join(PRIVADOS, 'malhas', 'DNIT.kml');
@@ -47,4 +50,26 @@ describe.skipIf(!existsSync(SOP))('malha da SOP', () => {
     expect(malha.linhas.filter((l) => !l.nome.trim())).toEqual([]);
     expect(malha.linhas.filter((l) => l.pts.some((p) => !noCeara(p)))).toEqual([]);
   }, 60_000);
+});
+
+// os kits aprovados (mesma fonte do kits.test.ts): só confere que a conta não lança e que é rápida
+const GABARITO = join(PRIVADOS, 'gabarito.json');
+describe.skipIf(!existsSync(DNIT) || !existsSync(SOP) || !existsSync(GABARITO))('faixa de domínio nos kits aprovados', () => {
+  const kits: { zip: string; rede: string[] }[] = existsSync(GABARITO) ? JSON.parse(readFileSync(GABARITO, 'utf-8')).kits : [];
+  let malhas: Malha[] = [];
+  beforeAll(() => {
+    malhas = [lerMalha(new Uint8Array(readFileSync(DNIT)), 'DNIT.kml'), lerMalha(new Uint8Array(readFileSync(SOP)), 'SOP.kmz')];
+  }, 180_000);
+
+  kits.forEach((kit, i) => {
+    it(`kit ${i + 1}: avisosFaixa não lança e leva menos de 1 s`, () => {
+      const arquivos = abrirZip(new Uint8Array(readFileSync(join(PRIVADOS, kit.zip))));
+      const rede = proporRedeKml(kit.rede.flatMap((c) => lerKml(arquivos.find((x) => x.caminho === c)!.bytes)));
+      const t0 = performance.now();
+      const avisos = avisosFaixa(rede, malhas);
+      const ms = performance.now() - t0;
+      console.log(`faixa kit ${i + 1}: ${avisos.filter((a) => a.codigo === 'FAIXA_DOMINIO').length} avisos de faixa, ${ms.toFixed(0)} ms`);
+      expect(ms).toBeLessThan(1000);
+    }, 60_000);
+  });
 });

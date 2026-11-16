@@ -46,10 +46,15 @@ const malhaPerto: Malha = { tipo: 'SOP', nome: 'SOP.kml', linhas: [{ nome: 'CE-9
 
 // com malha longe da obra por padrão, para os avisos da faixa não entrarem nas outras contas
 async function noCaso(malha: Malha | null = malhaLonge) {
-  estado = criarEstado({ lerAreas: async () => BASE, lerMalha: async () => malha! });
+  const lerMalha = async (_b: Uint8Array, _n: string, tipo: TipoMalha): Promise<Malha> => ({ ...(malha ?? malhaLonge), tipo });
+  estado = criarEstado({ lerAreas: async () => BASE, lerMalha });
   criarPainel(raiz, estado, { salvar });
   await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
-  if (malha) await estado.carregarMalha(new Uint8Array([1]), 'SOP.kml', malha.tipo as TipoMalha);
+  if (malha) {
+    // DNIT e SOP carregadas (a DNIT com a mesma linha): não sai o amarelo de malha que falta
+    await estado.carregarMalha(new Uint8Array([1]), 'DNIT.kml', 'DNIT');
+    await estado.carregarMalha(new Uint8Array([1]), 'SOP.kml', 'SOP');
+  }
   await estado.carregarProjeto(DXF, 'obra.dxf', '0000000001');
   botao('Rede confirmada, seguir').click();
   botao('Seguir para o caso').click();
@@ -265,8 +270,8 @@ describe('painel: faixa de domínio', () => {
   it('malha a 20 m da rede: aviso da rodovia com metros e faixa, no cartão e no resumo', async () => {
     await noCaso(malhaPerto);
     const aviso = estado.ler().avisosFaixa;
-    expect(aviso).toHaveLength(1);
-    expect(aviso[0].texto).toBe('precisa de processo DNIT/SOP: CE-999, 100 m de rede dentro da faixa de 35 m');
+    expect(aviso).toHaveLength(2); // a DNIT (mesma linha) e a SOP
+    expect(aviso[1].texto).toBe('precisa de processo DNIT/SOP: CE-999, 100 m de rede dentro da faixa de 35 m');
     expect(passo(5).textContent).toContain('CE-999, 100 m de rede dentro da faixa de 35 m');
     expect(passo(5).querySelector('.resumo-txt')!.textContent).toContain('Aviso: precisa de processo DNIT/SOP: CE-999');
   });
@@ -274,7 +279,7 @@ describe('painel: faixa de domínio', () => {
   it('o passo 1 mostra as três zonas de malha e, depois de lida, o arquivo com o número de linhas', async () => {
     await noCaso(malhaPerto);
     clicarPasso(1);
-    expect(passo(1).querySelectorAll('input[aria-label^="Escolher a malha"]')).toHaveLength(2); // DNIT e Ferrovia
+    expect(passo(1).querySelectorAll('input[aria-label^="Escolher a malha"]')).toHaveLength(1); // só a Ferrovia: DNIT e SOP já lidas
     expect(passo(1).textContent).toContain('SOP (rodovias estaduais) · 1 linhas');
   });
 });

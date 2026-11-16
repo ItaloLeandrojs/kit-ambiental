@@ -15,6 +15,12 @@ export const TEXTOS = {
   faixaDominio: 'precisa de processo DNIT/SOP',
   // provisório: texto a confirmar com o Italo
   faixaSemMalha: 'Carregue as malhas DNIT e SOP para conferir a faixa de domínio',
+  // provisório: texto a confirmar com o Italo
+  faixaSemMalhaDnit: 'Carregue a malha DNIT para conferir a faixa de domínio',
+  // provisório: texto a confirmar com o Italo
+  faixaSemMalhaSop: 'Carregue a malha SOP para conferir a faixa de domínio',
+  // provisório: texto a confirmar com o Italo
+  faixaFerrovia: 'precisa de processo da ferrovia',
 } as const;
 
 // "Por que importa" de cada aviso do caso, para o cartão da tela (texto provisório: a confirmar com o Italo)

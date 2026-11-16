@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { avisosFaixa, ERRO_TIPO_MALHA, lerMalha, type Malha } from '../src/nucleo/faixa.ts';
+import { avisosFaixa as avisosFaixaTodos, ERRO_DNIT_SEM_UF, ERRO_MALHA_VAZIA, ERRO_TIPO_MALHA, lerMalha, type Malha } from '../src/nucleo/faixa.ts';
 import { montarZip } from '../src/nucleo/zip.ts';
 import type { Pt, Rede, Vao } from '../src/nucleo/tipos.ts';
 import { deUtm } from '../src/nucleo/utm.ts';
@@ -36,6 +36,22 @@ describe('lerMalha', () => {
     expect(m.linhas.map((l) => l.nome)).toEqual(['BR-222']);
   });
 
+  it('SOP sem RODOVIA: o nome da linha cai para o name do Placemark', () => {
+    const t = `<kml><Document><Placemark><name>Trecho X</name><MultiGeometry><LineString><coordinates>${coords(eixo(9500020))}</coordinates></LineString></MultiGeometry></Placemark></Document></kml>`;
+    expect(lerMalha(bytes(t), 'SOP.kml').linhas[0].nome).toBe('Trecho X');
+  });
+
+  it('malha sem nenhuma linha dá erro', () => {
+    expect(() => lerMalha(bytes('<kml><Document></Document></kml>'), 'SOP.kml')).toThrow(ERRO_MALHA_VAZIA);
+    const soDf = `<kml><Document><Placemark><ExtendedData><SchemaData><SimpleData name="vl_br">010</SimpleData><SimpleData name="sg_uf">DF</SimpleData></SchemaData></ExtendedData><LineString><coordinates>${coords(eixo(9500020))}</coordinates></LineString></Placemark></Document></kml>`;
+    expect(() => lerMalha(bytes(soDf), 'DNIT.kml')).toThrow(ERRO_MALHA_VAZIA);
+  });
+
+  it('DNIT sem o campo sg_uf em nenhuma feição dá erro', () => {
+    const t = `<kml><Document><Placemark><ExtendedData><SchemaData><SimpleData name="vl_br">010</SimpleData></SchemaData></ExtendedData><LineString><coordinates>${coords(eixo(9500020))}</coordinates></LineString></Placemark></Document></kml>`;
+    expect(() => lerMalha(bytes(t), 'DNIT.kml')).toThrow(ERRO_DNIT_SEM_UF);
+  });
+
   it('abre KMZ e aceita o tipo pelo parâmetro', () => {
     const kmz = montarZip([{ caminho: 'doc.kml', bytes: sop([{ rodovia: 'X', pts: eixo(9500020) }]) }]);
     const m = lerMalha(kmz, 'malha-qualquer.kmz', 'FERROVIA');
@@ -43,15 +59,18 @@ describe('lerMalha', () => {
     expect(m.linhas).toHaveLength(1);
   });
 
-  it('tipo pelo nome do arquivo: ferrovia; sem pista nenhuma, erro', () => {
-    expect(lerMalha(sop([]), 'Transnordestina.kml').tipo).toBe('FERROVIA');
-    expect(() => lerMalha(sop([]), 'malha.kml')).toThrow(ERRO_TIPO_MALHA);
+  it('tipo pelo nome do arquivo (ferrovia); sem DNIT, SOP ou ferrovia no nome e sem parâmetro, erro', () => {
+    expect(lerMalha(sop([{ rodovia: 'X', pts: eixo(9500020) }]), 'Transnordestina.kml').tipo).toBe('FERROVIA');
+    expect(() => lerMalha(sop([{ rodovia: 'X', pts: eixo(9500020) }]), 'malha.kml')).toThrow(ERRO_TIPO_MALHA);
   });
 
   it('arquivo que não é KML dá erro', () => {
     expect(() => lerMalha(bytes('lixo'), 'SOP.kml')).toThrow();
   });
 });
+
+// só os avisos de faixa em si (sem o amarelo de malha que falta)
+const avisosFaixa = (r: Rede, ms: Malha[]) => avisosFaixaTodos(r, ms).filter((a) => a.codigo === 'FAIXA_DOMINIO');
 
 describe('avisosFaixa', () => {
   const malha = (tipo: Malha['tipo'], rodovia: string, n: number): Malha => ({ tipo, nome: `${tipo}.kml`, linhas: [{ nome: rodovia, pts: eixo(n).map((p) => [p[0], p[1]] as Pt) }] });
@@ -109,11 +128,46 @@ describe('avisosFaixa', () => {
     expect(avisosFaixa(maior, [vertical])[0].texto).toContain('70 m de rede');
   });
 
-  it('sem malha carregada: amarelo pedindo as malhas, nunca verde', () => {
-    const r = avisosFaixa(REDE, []);
+  it('sem nenhuma malha e com rede nova: amarelo pedindo as duas, nunca verde', () => {
+    const r = avisosFaixaTodos(REDE, []);
     expect(r).toHaveLength(1);
     expect(r[0].nivel).toBe('amarelo');
     expect(r[0].codigo).toBe('FAIXA_SEM_MALHA');
     expect(r[0].texto).toBe('Carregue as malhas DNIT e SOP para conferir a faixa de domínio');
+  });
+
+  it('só a SOP carregada: amarelo da DNIT; só a DNIT: amarelo da SOP; ferrovia é opcional', () => {
+    const longe = (t: Malha['tipo']) => malha(t, 'X', 9509000);
+    expect(avisosFaixaTodos(REDE, [longe('SOP')]).map((a) => a.texto)).toEqual(['Carregue a malha DNIT para conferir a faixa de domínio']);
+    expect(avisosFaixaTodos(REDE, [longe('DNIT')]).map((a) => a.texto)).toEqual(['Carregue a malha SOP para conferir a faixa de domínio']);
+    expect(avisosFaixaTodos(REDE, [longe('DNIT'), longe('SOP')])).toEqual([]);
+  });
+
+  it('malha carregada mas sem linhas conta como malha que falta', () => {
+    const vazia: Malha = { tipo: 'DNIT', nome: 'DNIT.kml', linhas: [] };
+    expect(avisosFaixaTodos(REDE, [vazia, malha('SOP', 'X', 9509000)]).map((a) => a.texto)).toEqual(['Carregue a malha DNIT para conferir a faixa de domínio']);
+  });
+
+  it('sem rede nova não há amarelo de carregar', () => {
+    const existente = rede(vao('a', [[500000, 9500000], [500100, 9500000]], { situacao: 'existente' }));
+    expect(avisosFaixaTodos(existente, [])).toEqual([]);
+    expect(avisosFaixaTodos(rede(), [])).toEqual([]);
+  });
+
+  it('várias malhas juntas: um aviso de cada, na ordem DNIT, SOP, ferrovia', () => {
+    const r = avisosFaixaTodos(REDE, [malha('FERROVIA', 'Linha Sul', 9500010), malha('SOP', 'CE-999', 9500020), malha('DNIT', 'BR-222', 9500010)]);
+    expect(r.map((a) => a.texto.split(': ')[1].split(',')[0])).toEqual(['BR-222', 'CE-999', 'Linha Sul']);
+  });
+
+  it('ferrovia usa o texto da ferrovia, no mesmo formato', () => {
+    expect(avisosFaixa(REDE, [malha('FERROVIA', 'Linha Sul', 9500010)])[0].texto).toBe('precisa de processo da ferrovia: Linha Sul, 100 m de rede dentro da faixa de 22,5 m');
+  });
+
+  it('trecho que só encosta na faixa (menos de 0,5 m dentro) não gera aviso', () => {
+    // a rede acaba em E = 500100; a faixa da SOP (35 m) de uma rodovia vertical em 500134,8 chega a 500099,8: 0,2 m dentro
+    const quase: Malha = { tipo: 'SOP', nome: 'SOP.kml', linhas: [{ nome: 'CE-777', pts: [[500134.8, 9499900], [500134.8, 9500100]] }] };
+    expect(avisosFaixa(REDE, [quase])).toEqual([]);
+    const dentro: Malha = { tipo: 'SOP', nome: 'SOP.kml', linhas: [{ nome: 'CE-777', pts: [[500134, 9499900], [500134, 9500100]] }] };
+    expect(avisosFaixa(REDE, [dentro])[0].texto).toContain('1 m de rede');
   });
 });

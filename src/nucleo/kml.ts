@@ -3,7 +3,7 @@ import { paraUtm } from './utm.ts';
 import { abrirZip } from './zip.ts';
 import { percorrerXml } from './xml.ts';
 
-const ERRO_KML = 'Este arquivo não é um KML nem um KMZ';
+export const ERRO_KML = 'Este arquivo não é um KML nem um KMZ';
 
 export function textoDoKml(bytes: Uint8Array): string {
   if (bytes.length > 1 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
