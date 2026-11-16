@@ -129,10 +129,34 @@ describe('conferirZip: cópias estragadas, uma por teste', () => {
     expect(vermelhos(r2)).toEqual(['PAR']);
   });
 
+  it('APP ou POSTES só no SHP ou só no KML: PAR vermelho (camada do kit)', () => {
+    for (const nome of [`${OS} APP DO AÇUDE`, `${OS} POSTES`]) {
+      const semKml = conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} KML/${nome}.kml`)));
+      expect(vermelhos(semKml)).toEqual(['PAR']);
+      const semShp = conferirZip(montarZip(base.filter((a) => !a.caminho.startsWith(`${OS} SHAPEFILE/${nome}.`))));
+      expect(vermelhos(semShp)).toEqual(['PAR']);
+    }
+  });
+
+  // camada que não é do kit (uma água esquecida no zip), longe das outras para não parear pela caixa
+  const lagoa: CamadaKit = {
+    nome: `${OS} LAGOA`,
+    tipo: 'poligono',
+    feicoes: [{ name: 'LAGOA', geometria: [{ t: 'poligono', aneis: [[[X + 500, Y + 500], [X + 600, Y + 500], [X + 600, Y + 600], [X + 500, Y + 600], [X + 500, Y + 500]]] }] }],
+  };
+  const lagoaShp = (): ArquivoZip[] => {
+    const g = gravarShp(lagoa);
+    return [
+      { caminho: `${OS} SHAPEFILE/${OS} LAGOA.shp`, bytes: g.shp }, { caminho: `${OS} SHAPEFILE/${OS} LAGOA.shx`, bytes: g.shx },
+      { caminho: `${OS} SHAPEFILE/${OS} LAGOA.dbf`, bytes: g.dbf }, { caminho: `${OS} SHAPEFILE/${OS} LAGOA.prj`, bytes: enc.encode(g.prj) },
+      { caminho: `${OS} SHAPEFILE/${OS} LAGOA.cpg`, bytes: enc.encode(g.cpg) },
+    ];
+  };
+
   it('outra camada só no SHP ou só no KML: PAR amarelo, confira se é sobra', () => {
     for (const r of [
-      conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} KML/${OS} POSTES.kml`))),
-      conferirZip(montarZip(base.filter((a) => !a.caminho.startsWith(`${OS} SHAPEFILE/${OS} POSTES.`)))),
+      conferirZip(montarZip([...base, { caminho: `${OS} KML/${OS} LAGOA.kml`, bytes: enc.encode(gravarKml(lagoa)) }])),
+      conferirZip(montarZip([...base, ...lagoaShp()])),
     ]) {
       expect(vermelhos(r)).toEqual([]);
       const it = r.find((i) => i.codigo === 'PAR');
@@ -142,7 +166,7 @@ describe('conferirZip: cópias estragadas, uma por teste', () => {
     }
   });
 
-  it('.shx solto, sem o .shp: SHP_INCOMPLETO amarelo, como sobra', () => {
+  it('.shx solto, sem o .shp e sem KML: SHP_INCOMPLETO amarelo, como sobra', () => {
     const solto = { caminho: `${OS} SHAPEFILE/${OS} RIACHO.shx`, bytes: base.find((a) => a.caminho === `${OS} SHAPEFILE/${OS} POSTES.shx`)!.bytes };
     const r = conferirZip(montarZip([...base, solto]));
     expect(vermelhos(r)).toEqual([]);
@@ -150,15 +174,22 @@ describe('conferirZip: cópias estragadas, uma por teste', () => {
     expect(r.find((i) => i.codigo === 'SHP_INCOMPLETO')?.titulo).toContain('sem o .shp');
   });
 
+  it('.shx solto com KML de mesmo nome: camada quebrada, SHP_INCOMPLETO vermelho', () => {
+    const solto = { caminho: `${OS} SHAPEFILE/${OS} RIACHO.shx`, bytes: base.find((a) => a.caminho === `${OS} SHAPEFILE/${OS} POSTES.shx`)!.bytes };
+    const kmlRiacho = { caminho: `${OS} KML/${OS} RIACHO.kml`, bytes: enc.encode(gravarKml({ ...lagoa, nome: `${OS} RIACHO` })) };
+    const r = conferirZip(montarZip([...base, solto, kmlRiacho]));
+    expect(vermelhos(r)).toEqual(['SHP_INCOMPLETO']);
+    expect(r.find((i) => i.nivel === 'vermelho')?.titulo).toContain('falta .shp');
+  });
+
   it('com o .shp e sem o .shx: SHP_INCOMPLETO continua vermelho', () => {
     const r = conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} SHAPEFILE/${OS} POSTES.shx`)));
     expect(vermelhos(r)).toEqual(['SHP_INCOMPLETO']);
   });
 
-  it('KML de rede com o shapefile sem .shp: a rede fica sem par, vermelho', () => {
+  it('KML de rede com o shapefile sem .shp: SHP_INCOMPLETO vermelho', () => {
     const r = conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} SHAPEFILE/${OS} REDE BT.shp`)));
-    expect(vermelhos(r)).toEqual(['PAR']);
-    expect(codigos(r, 'amarelo')).toContain('SHP_INCOMPLETO');
+    expect(vermelhos(r)).toEqual(['SHP_INCOMPLETO']);
   });
 
   it('SHP sem KML com o desenho igual ao de outro SHP: amarelo, arquivo repetido', () => {

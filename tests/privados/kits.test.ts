@@ -1,13 +1,13 @@
 // Prova contra os kits que os órgãos já aprovaram. Os números de OS, os nomes das áreas e os metros
 // vêm do casos-privados/gabarito.json (fora do git), montado à mão a partir dos memoriais.
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PRIVADOS } from './caminhos.ts';
 import { abrirZip, type ArquivoZip } from '../../src/nucleo/zip.ts';
 import { lerKml } from '../../src/nucleo/kml.ts';
 import { proporRedeKml } from '../../src/nucleo/rede.ts';
-import { lerAreasProtegidas } from '../../src/nucleo/areas.ts';
+import { lerAreasProtegidas, type BaseAreas } from '../../src/nucleo/areas.ts';
 import { calcularCaso, type AreaConfirmada } from '../../src/nucleo/caso.ts';
 import { conferirZip } from '../../src/nucleo/conferir.ts';
 import type { Pt, TipoRede } from '../../src/nucleo/tipos.ts';
@@ -42,8 +42,12 @@ const LARGURA_NAO_USADA = 0; // a APP já vem desenhada no kit; o caso não usa 
 const nomeDoArquivo = (caminho: string): string => caminho.slice(caminho.lastIndexOf('/') + 1).replace(/\.km[lz]$/i, '');
 
 describe.skipIf(!existsSync(GABARITO) || !existsSync(KMZ))('kits aprovados pelos órgãos', () => {
+  // o Vitest roda este corpo mesmo com a suíte pulada: aqui só se lê o gabarito, e só se ele existir
   const kits: KitGabarito[] = existsSync(GABARITO) ? JSON.parse(readFileSync(GABARITO, 'utf-8')).kits : [];
-  const base = lerAreasProtegidas(new Uint8Array(readFileSync(KMZ)), 'areas-protegidas.kmz');
+  let base: BaseAreas;
+  beforeAll(() => {
+    base = lerAreasProtegidas(new Uint8Array(readFileSync(KMZ)), 'areas-protegidas.kmz');
+  }, 120_000);
 
   it('o gabarito tem os 11 kits', () => {
     expect(kits).toHaveLength(11);

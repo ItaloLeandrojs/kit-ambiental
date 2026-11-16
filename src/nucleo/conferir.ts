@@ -129,8 +129,9 @@ function tiposAceitos(norm: string): TipoCamada[] | null {
 }
 const ehRede = (norm: string): boolean => tiposAceitos(norm)?.join() === 'linha';
 const ehUnificado = (norm: string): boolean => /unificado/.test(norm);
-// camada sem par: só a de rede segue vermelha (decisão do Italo); o resto pode ser sobra (água, APP, camada velha)
-const ehCamadaDeRede = (norm: string): boolean => /\brede\b/.test(norm);
+// camada sem par: a que faz parte do kit (rede, APP, poste) segue vermelha (decisão do Italo);
+// o resto pode ser sobra (uma água ou camada velha esquecida no zip)
+const ehCamadaDoKit = (norm: string): boolean => /\b(rede|apps?|postes?)\b/.test(norm);
 const PORQUE_SEM_PAR =
   'Esta camada existe num formato só. Nos kits aprovados isso aparece como sobra (uma água ou camada velha esquecida no zip), mas o órgão confere o KML contra o shapefile e pode estranhar.';
 
@@ -233,11 +234,13 @@ export function conferirZip(bytes: Uint8Array, dxf?: Uint8Array): ItemConferenci
 
   // ---- SHP_INCOMPLETO ----
   let incompletos = 0;
+  // grupo sem .shp com KML de mesmo nome é camada real quebrada (vermelho); sem KML é sobra (amarelo)
+  const temKmlIgual = (s: CamadaShp): boolean => kmls.some((k) => k.norm === s.norm);
   for (const s of shps) {
     const faltam = EXTS_SHP.filter((e) => !s.arquivos[e]);
     const graves = faltam.filter((e) => e !== 'cpg');
-    if (!s.arquivos.shp) {
-      // sem o .shp não há camada: são arquivos soltos que sobraram no zip
+    if (!s.arquivos.shp && !temKmlIgual(s)) {
+      // sem o .shp e sem KML não há camada: são arquivos soltos que sobraram no zip
       incompletos++;
       const soltos = EXTS_SHP.filter((e) => s.arquivos[e]).map((e) => '.' + e).join(', ');
       itens.push(item('amarelo', 'SHP_INCOMPLETO', `Arquivo solto, sem o .shp: ${s.base} (${soltos})`,
@@ -261,11 +264,11 @@ export function conferirZip(bytes: Uint8Array, dxf?: Uint8Array): ItemConferenci
   const pares: { k: CamadaKml; s: CamadaShp }[] = [];
   const kLivres = [...kmls];
   const sLivres: CamadaShp[] = [];
-  // grupo sem .shp não é camada (já saiu como sobra em SHP_INCOMPLETO): não faz par com KML nenhum
-  for (const s of shps.filter((x) => x.arquivos.shp)) {
+  // grupo sem .shp só faz par pelo nome (a falta já saiu em SHP_INCOMPLETO); sem par pelo nome, não é camada
+  for (const s of shps) {
     const i = kLivres.findIndex((k) => k.norm === s.norm);
     if (i >= 0) pares.push({ k: kLivres.splice(i, 1)[0], s });
-    else sLivres.push(s);
+    else if (s.arquivos.shp) sLivres.push(s);
   }
   const sSemPar: CamadaShp[] = [];
   for (const s of sLivres) {
@@ -277,7 +280,7 @@ export function conferirZip(bytes: Uint8Array, dxf?: Uint8Array): ItemConferenci
   let problemasPar = 0;
   for (const k of kLivres) {
     problemasPar++;
-    if (ehCamadaDeRede(k.norm)) {
+    if (ehCamadaDoKit(k.norm)) {
       itens.push(item('vermelho', 'PAR', `Camada só no KML, sem shapefile: ${k.base}`,
         'O órgão confere o KML contra o shapefile; camada sem o outro lado ele devolve.', 'Grave o shapefile dessa camada (com o mesmo nome do KML) ou tire o KML que sobrou.', [k.caminho]));
     } else {
@@ -286,14 +289,13 @@ export function conferirZip(bytes: Uint8Array, dxf?: Uint8Array): ItemConferenci
     }
   }
   for (const s of sSemPar) {
-    if (!s.arquivos.shp) continue; // sem .shp não há camada: a falta já saiu em SHP_INCOMPLETO
     const cs = s.geo ? caixaDe(s.geo) : null;
     const repetido = !!cs && shps.some((o) => o !== s && o.geo !== null && s.geo !== null && caixasIguais(caixaDe(o.geo), cs) && nVertices(o.geo) === nVertices(s.geo) && o.tipo === s.tipo);
     problemasPar++;
     if (repetido) {
       itens.push(item('amarelo', 'PAR', `Arquivo repetido: ${s.base}`,
         'Este shapefile tem o mesmo desenho de outro do kit e não tem KML. O órgão pode estranhar a cópia.', 'Apague o shapefile repetido do zip.', s.caminhos));
-    } else if (ehCamadaDeRede(s.norm)) {
+    } else if (ehCamadaDoKit(s.norm)) {
       itens.push(item('vermelho', 'PAR', `Camada só no shapefile, sem KML: ${s.base}`,
         'O órgão confere o shapefile contra o KML; camada sem o outro lado ele devolve.', 'Grave o KML dessa camada (com o mesmo nome do shapefile) ou tire o shapefile que sobrou.', s.caminhos));
     } else {
