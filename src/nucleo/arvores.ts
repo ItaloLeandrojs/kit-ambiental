@@ -5,8 +5,10 @@ import type { CamadaKit } from './shp.ts';
 import { lerGpsJpeg } from './exif.ts';
 import { G } from './geom.ts';
 import { paraUtm } from './utm.ts';
+import { haTexto } from './formato.ts';
 
-export type IntervencaoArvore = 'poda' | 'supressao' | 'limpeza';
+// limpeza de faixa é uma ÁREA (polígono desenhado no mapa), não uma árvore: por isso não está aqui
+export type IntervencaoArvore = 'poda' | 'supressao';
 export interface Arvore { id: string; foto: string; ponto: Pt | null; especie: string; intervencao: IntervencaoArvore }
 
 export const LIMITE_ARVORES = 20;
@@ -58,6 +60,15 @@ export function avisosArvores(as: Arvore[]): Aviso[] {
       comoCorrigir: 'Use "Desenhar limpeza de faixa": clique os cantos da área no mapa e feche com duplo clique.',
     });
   }
+  const semEspecie = as.filter((a) => a.especie.trim() === '').length;
+  if (semEspecie > 0) {
+    avisos.push({
+      nivel: 'amarelo',
+      codigo: 'ARVORE_SEM_ESPECIE',
+      texto: semEspecie === 1 ? 'Há 1 árvore sem espécie.' : `Há ${semEspecie} árvores sem espécie.`,
+      comoCorrigir: 'Digite a espécie de cada árvore. Sem ela, a feição sai no kit com o nome "Árvore".',
+    });
+  }
   const sem = as.filter((a) => a.ponto === null).length;
   if (sem > 0) {
     avisos.push({
@@ -68,6 +79,55 @@ export function avisosArvores(as: Arvore[]): Aviso[] {
     });
   }
   return avisos;
+}
+
+export interface AreaParaCruzar { nome: string; poligonos: Pt[][][]; caixa?: [number, number, number, number] }
+
+const NOME_INTERVENCAO: Record<IntervencaoArvore, string> = { poda: 'Poda', supressao: 'Supressão' };
+const poligonoValido = (an: Pt[][]): boolean => an.length > 0 && an[0].length >= 4;
+
+/**
+ * Aviso amarelo para cada (intervenção, área) em que um ponto de árvore, ou o polígono de limpeza de faixa,
+ * cai dentro de uma área protegida ou de uma APP confirmada. Não muda metros nem hectares da rede.
+ */
+export function avisosEmArea(as: Arvore[], limpeza: Pt[][], areas: AreaParaCruzar[]): Aviso[] {
+  const avisos: Aviso[] = [];
+  const vistos = new Set<string>();
+  const poe = (que: string, nome: string) => {
+    const chave = `${que}|${nome}`;
+    if (vistos.has(chave)) return;
+    vistos.add(chave);
+    avisos.push({
+      nivel: 'amarelo',
+      codigo: 'ARVORE_EM_AREA',
+      texto: `${que} dentro de ${nome}: o órgão precisa saber; inclua no memorial`,
+      comoCorrigir: 'Cite a intervenção no memorial e confirme com o órgão da área antes de executar.',
+    });
+  };
+  const alvos = [
+    ...as.filter((a) => a.ponto !== null).map((a) => ({ que: NOME_INTERVENCAO[a.intervencao], geo: G.ponto(a.ponto!), caixa: [a.ponto![0], a.ponto![1], a.ponto![0], a.ponto![1]] })),
+    ...limpeza.filter((l) => l.length >= 3).map((l) => ({ que: 'Limpeza de faixa', geo: G.poligono([fechado(l)]), caixa: G.envelope(G.poligono([fechado(l)])) })),
+  ];
+  if (alvos.length === 0) return avisos;
+  for (const area of areas) {
+    for (const alvo of alvos) {
+      if (area.caixa && (alvo.caixa[0] > area.caixa[2] || alvo.caixa[2] < area.caixa[0] || alvo.caixa[1] > area.caixa[3] || alvo.caixa[3] < area.caixa[1])) continue;
+      if (area.poligonos.filter(poligonoValido).some((p) => G.distancia(alvo.geo, G.poligono(p)) === 0)) poe(alvo.que, area.nome);
+    }
+  }
+  return avisos;
+}
+
+/** Linha do resumo do caso: quantas podas, quantas supressões e a limpeza de faixa em m² e ha. Sem nada, `null`. */
+export function linhaArvores(as: Arvore[], limpeza: Pt[][]): string | null {
+  const podas = as.filter((a) => a.intervencao === 'poda').length;
+  const sup = as.filter((a) => a.intervencao === 'supressao').length;
+  const partes: string[] = [];
+  if (podas) partes.push(`${podas} ${podas === 1 ? 'poda' : 'podas'}`);
+  if (sup) partes.push(`${sup} ${sup === 1 ? 'supressão' : 'supressões'}`);
+  const m2 = limpeza.filter((l) => l.length >= 3).reduce((s, l) => s + G.area(G.poligono([fechado(l)])), 0);
+  if (m2 > 0) partes.push(`limpeza de faixa de ${Math.round(m2).toLocaleString('pt-BR')} m² (${haTexto(m2 / 10000)} ha)`);
+  return partes.length ? `Árvores: ${partes.join('; ')}.` : null;
 }
 
 const fechado = (anel: Pt[]): Pt[] => {

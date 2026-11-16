@@ -30,6 +30,8 @@ export const PORQUE_AVISO: Record<string, string> = {
   FORA_CEARA: 'Um desenho fora do Ceará não cruza com as áreas do KMZ: o resultado não valeria nada.',
   ARVORE_CARNAUBA: 'A carnaúba tem proteção própria em lei estadual. Cortar sem autorização gera multa.',
   ARVORE_MUITAS: 'Árvore por árvore, o kit fica enorme e difícil de conferir; o órgão costuma querer a área.',
+  ARVORE_EM_AREA: 'Poda, supressão ou limpeza dentro de área protegida pode exigir autorização do órgão da área.',
+  ARVORE_SEM_ESPECIE: 'O órgão avalia a autorização pela espécie; sem ela o pedido pode ser devolvido.',
   ARVORE_SEM_PONTO: 'Sem posição, a árvore não entra no kit: o órgão não saberia onde ela está.',
   SEM_AREA: 'O KMZ não cobre todos os rios, lagoas e açudes: não ter área no KMZ não prova que não há APP.',
 };

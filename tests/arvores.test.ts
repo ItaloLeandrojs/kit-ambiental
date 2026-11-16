@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AreaProtegida } from '../src/nucleo/areas.ts';
-import { avisosArvores, camadasArvores, posicaoDaFoto, type Arvore } from '../src/nucleo/arvores.ts';
+import { avisosArvores, avisosEmArea, camadasArvores, linhaArvores, posicaoDaFoto, type Arvore } from '../src/nucleo/arvores.ts';
 import { gravarKml } from '../src/nucleo/kml-saida.ts';
 import { paraUtm } from '../src/nucleo/utm.ts';
 import { bytesHeic, jpegComGps, jpegSemExif } from './jpeg-gps.ts';
@@ -72,6 +72,42 @@ describe('avisosArvores', () => {
 
   it('sem árvores: nenhum aviso', () => {
     expect(avisosArvores([])).toEqual([]);
+  });
+});
+
+describe('avisosArvores: espécie em branco', () => {
+  it('espécie vazia ou só espaços: amarelo ARVORE_SEM_ESPECIE', () => {
+    const a = avisosArvores([arvore('a', { especie: '' }), arvore('b', { especie: '  ' }), arvore('c')]);
+    expect(a).toEqual([expect.objectContaining({ nivel: 'amarelo', codigo: 'ARVORE_SEM_ESPECIE', texto: 'Há 2 árvores sem espécie.' })]);
+  });
+});
+
+describe('avisosEmArea', () => {
+  const UC = { nome: 'UC Inventada', poligonos: [[[[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]] as [number, number][]]], caixa: [0, 0, 100, 100] as [number, number, number, number] };
+  it('supressão dentro de uma área: aviso com o texto pedido; fora ou sem ponto: nada', () => {
+    const dentro = avisosEmArea([arvore('a', { intervencao: 'supressao', ponto: [50, 50] })], [], [UC]);
+    expect(dentro).toEqual([expect.objectContaining({
+      nivel: 'amarelo', codigo: 'ARVORE_EM_AREA', texto: 'Supressão dentro de UC Inventada: o órgão precisa saber; inclua no memorial',
+    })]);
+    expect(avisosEmArea([arvore('a', { ponto: [500, 500] })], [], [UC])).toEqual([]);
+    expect(avisosEmArea([arvore('a', { ponto: null })], [], [UC])).toEqual([]);
+  });
+  it('poda dentro, sem repetir o mesmo par; limpeza que cruza a borda também avisa', () => {
+    const as = [arvore('a', { ponto: [10, 10] }), arvore('b', { ponto: [20, 20] })];
+    const r = avisosEmArea(as, [[[90, 90], [200, 90], [200, 200]]], [UC]);
+    expect(r.map((x) => x.texto)).toEqual([
+      'Poda dentro de UC Inventada: o órgão precisa saber; inclua no memorial',
+      'Limpeza de faixa dentro de UC Inventada: o órgão precisa saber; inclua no memorial',
+    ]);
+    expect(avisosEmArea([], [[[500, 500], [600, 500], [600, 600]]], [UC])).toEqual([]);
+  });
+});
+
+describe('linhaArvores', () => {
+  it('podas, supressões e limpeza em m² e ha; sem nada, null', () => {
+    const as = [arvore('a'), arvore('b'), arvore('c', { intervencao: 'supressao' })];
+    expect(linhaArvores(as, [[[0, 0], [100, 0], [100, 100], [0, 100]]])).toBe('Árvores: 2 podas; 1 supressão; limpeza de faixa de 10.000 m² (1,0000 ha).');
+    expect(linhaArvores([], [])).toBeNull();
   });
 });
 

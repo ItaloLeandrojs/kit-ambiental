@@ -157,11 +157,80 @@ describe('estado: árvores', () => {
   it('mais de 20 árvores: aviso amarelo sugerindo a limpeza de faixa', async () => {
     await comCaso();
     estado.adicionarFotos(Array.from({ length: 21 }, (_, i) => foto(`f${i}.jpg`, jpegNoUtm([500040, 9500045]))));
-    expect(estado.ler().avisosArvores.map((x) => x.codigo)).toEqual(['ARVORE_MUITAS']);
+    expect(estado.ler().avisosArvores.map((x) => x.codigo)).toEqual(['ARVORE_MUITAS', 'ARVORE_SEM_ESPECIE']);
+  });
+});
+
+describe('estado: árvore em área protegida', () => {
+  it('supressão dentro da UC avisa no estado; fora dela, não', async () => {
+    await comCaso();
+    const [a, b] = estado.adicionarFotos([foto('a.jpg', jpegNoUtm([500040, 9500045])), foto('b.jpg', jpegNoUtm([500300, 9500045]))]);
+    estado.mudarArvore(a, { especie: 'Mulungu', intervencao: 'supressao' });
+    estado.mudarArvore(b, { especie: 'Ipê' });
+    expect(estado.ler().avisosEmArea.map((x) => x.texto)).toEqual(['Supressão dentro de UC Inventada: o órgão precisa saber; inclua no memorial']);
+    estado.removerArvore(a);
+    expect(estado.ler().avisosEmArea).toEqual([]);
+  });
+
+  it('limpeza dentro de uma APP confirmada avisa; os metros e hectares da rede não mudam', async () => {
+    const base: BaseAreas = { ...BASE, areas: [...BASE.areas, area(3, 'Acude Inventado', ['Recursos Hídricos - COGERH', 'Açudes Monitorados'], 500170, 9500000, 500270, 9500100)] };
+    estado = criarEstado({ lerAreas: async () => base });
+    await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
+    await estado.carregarProjeto(DXF, 'obra.dxf', '0000000001');
+    const i = estado.ler().apps.findIndex((a) => a.proposta.agua.id === 3);
+    estado.confirmarApp(i, 100);
+    const antes = JSON.stringify(estado.ler().caso!.intervencoes.map((x) => [x.area.nome, x.metros, x.hectares]));
+    estado.comecarLimpeza();
+    for (const p of [[500280, 9500020], [500320, 9500020], [500320, 9500060]] as Pt[]) estado.clicarNoMapa(p);
+    estado.fecharLimpeza();
+    const textos = estado.ler().avisosEmArea.map((x) => x.texto);
+    expect(textos).toHaveLength(1);
+    expect(textos[0]).toMatch(/^Limpeza de faixa dentro de .*Acude Inventado.*: o órgão precisa saber; inclua no memorial$/);
+    expect(JSON.stringify(estado.ler().caso!.intervencoes.map((x) => [x.area.nome, x.metros, x.hectares]))).toBe(antes);
   });
 });
 
 describe('painel: passo 4, árvores', () => {
+  it('digitar a espécie não refaz o cartão: o campo é o mesmo elemento e o foco continua nele', async () => {
+    await comCaso(true);
+    botao('Rede confirmada, seguir').click();
+    estado.adicionarFotos([foto('a.jpg', jpegNoUtm([500040, 9500045])), foto('b.jpg', jpegNoUtm([500050, 9500045]))]);
+    const campo = passo(4).querySelector('.arvore input[type="text"]') as HTMLInputElement;
+    campo.focus();
+    expect(document.activeElement).toBe(campo);
+    campo.value = 'Ipê';
+    campo.dispatchEvent(new Event('change', { bubbles: true }));
+    const depois = passo(4).querySelector('.arvore input[type="text"]') as HTMLInputElement;
+    expect(depois).toBe(campo);
+    expect(depois.value).toBe('Ipê');
+    expect(document.activeElement).toBe(depois);
+    expect(passo(4).textContent).toContain('Há 1 árvore sem espécie.');
+  });
+
+  it('o foco do campo volta mesmo quando o cartão é refeito (mudou o ponto)', async () => {
+    await comCaso(true);
+    botao('Rede confirmada, seguir').click();
+    const [a] = estado.adicionarFotos([foto('a.jpg', jpegSemExif())]);
+    (passo(4).querySelector('.arvore input[type="text"]') as HTMLInputElement).focus();
+    estado.colocarArvore(a);
+    estado.clicarNoMapa([500040, 9500040]);
+    const campo = passo(4).querySelector('.arvore input[type="text"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(campo);
+  });
+
+  it('o passo 5 mostra o aviso de árvore em área e a linha das árvores no resumo', async () => {
+    await comCaso(true);
+    botao('Rede confirmada, seguir').click();
+    const [a] = estado.adicionarFotos([foto('a.jpg', jpegNoUtm([500040, 9500045]))]);
+    estado.mudarArvore(a, { especie: 'Mulungu', intervencao: 'supressao' });
+    botao('Seguir para o caso').click();
+    const p5 = passo(5).textContent!;
+    expect(p5).toContain('Árvore em área protegida');
+    expect(p5).toContain('Supressão dentro de UC Inventada: o órgão precisa saber; inclua no memorial');
+    expect(p5).toContain('Por que importa');
+    expect(p5).toContain('Árvores: 1 supressão.');
+  });
+
   it('"Rede confirmada, seguir" abre o passo 4, que mostra a zona de fotos; o passo 5 espera', async () => {
     await comCaso(true);
     expect(passo(4).classList.contains('bloqueado')).toBe(false);

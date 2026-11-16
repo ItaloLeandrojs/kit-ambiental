@@ -1,7 +1,7 @@
 // Painel de passos. Fica aberto só o passo atual; os passos feitos viram uma linha de resumo,
 // e clicar no resumo reabre o passo. O passo 4 (árvores) é opcional: "se houver".
 import type { Aviso, Poste, Pt, TipoRede, Vao } from '../nucleo/tipos.ts';
-import { avisosArvores, type Arvore } from '../nucleo/arvores.ts';
+import { linhaArvores, type Arvore } from '../nucleo/arvores.ts';
 import type { Caso, Intervencao } from '../nucleo/caso.ts';
 import { ehAgua } from '../nucleo/areas.ts';
 import type { ItemConferencia } from '../nucleo/conferir.ts';
@@ -134,6 +134,9 @@ const TITULO_AVISO: Record<string, string> = {
   SEM_AREA: 'Sem área protegida no KMZ',
   ARVORE_CARNAUBA: 'Carnaúba',
   ARVORE_MUITAS: 'Muitas árvores',
+  ARVORE_SEM_ESPECIE: 'Árvore sem espécie',
+  ARVORE_SEM_PONTO: 'Árvore sem posição',
+  ARVORE_EM_AREA: 'Árvore em área protegida',
 };
 
 function linhasDoAviso(a: Aviso, porque?: string): Filho[] {
@@ -146,7 +149,7 @@ function linhasDoAviso(a: Aviso, porque?: string): Filho[] {
 }
 
 function blocoAviso(a: Aviso): HTMLElement {
-  const titulo = a.nivel === 'vermelho' ? 'Pare e confira' : (TITULO_AVISO[a.codigo] ?? 'Confira');
+  const titulo = a.nivel === 'vermelho' && !a.codigo.startsWith('ARVORE_') ? 'Pare e confira' : (TITULO_AVISO[a.codigo] ?? (a.nivel === 'vermelho' ? 'Pare e confira' : 'Confira'));
   return h('div', { class: `aviso ${a.nivel}`, role: a.nivel === 'vermelho' ? 'alert' : undefined },
     h('h3', {}, titulo, h('span', { class: 'cod' }, a.codigo)),
     h('dl', {}, ...linhasDoAviso(a)));
@@ -220,6 +223,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
   let dxfConferir: Uint8Array | null = null;
   const abertura = new Map<number, boolean>(); // o que a pessoa abriu ou fechou à mão
   let projetoLido: { bytes: Uint8Array; nome: string } | null = null;
+  const cartoesArvore = new Map<string, { chave: string; el: HTMLElement }>(); // cartão pronto, reaproveitado enquanto nada nele mudou
   const miniaturas = new Map<string, string>(); // id da árvore -> endereço local da miniatura (nada sai do navegador)
 
   const soltarMiniatura = (id: string) => {
@@ -396,44 +400,57 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     ];
   }
 
+  // Digitar a espécie ou trocar a intervenção não refaz o cartão: o campo que a pessoa está usando continua o mesmo
+  // elemento (o foco e o Tab seguem). Só ponto, origem, aviso da foto, miniatura e modo de clique refazem.
   function cartaoArvore(a: Arvore, r: Retrato): HTMLElement {
     const info = r.infoFotos[a.id];
     const url = miniaturas.get(a.id);
     const esperando = r.modoMapa?.t === 'arvore' && r.modoMapa.id === a.id;
+    const chave = JSON.stringify([a.foto, a.ponto, info, esperando, url ?? null]);
+    const guardado = cartoesArvore.get(a.id);
+    if (guardado && guardado.chave === chave) {
+      // o estado pode ter mudado por outro caminho: o que está escrito acompanha, menos no campo em uso
+      const campo = guardado.el.querySelector<HTMLInputElement>('input[type="text"]');
+      if (campo && campo !== document.activeElement) campo.value = a.especie;
+      const sel = guardado.el.querySelector<HTMLSelectElement>('select');
+      if (sel && sel !== document.activeElement) sel.value = a.intervencao;
+      return guardado.el;
+    }
     const especie = h('input', {
-      type: 'text', value: a.especie, placeholder: 'Espécie (digite)', 'aria-label': `Espécie da árvore da foto ${a.foto}`,
+      type: 'text', value: a.especie, 'data-foco': `${a.id}:especie`, placeholder: 'Espécie (digite)', 'aria-label': `Espécie da árvore da foto ${a.foto}`,
       onchange: (e) => estado.mudarArvore(a.id, { especie: (e.target as HTMLInputElement).value }),
     });
     const intervencao = h('select', {
-      'aria-label': `Intervenção da árvore da foto ${a.foto}`,
+      'data-foco': `${a.id}:intervencao`, 'aria-label': `Intervenção da árvore da foto ${a.foto}`,
       onchange: (e) => estado.mudarArvore(a.id, { intervencao: (e.target as HTMLSelectElement).value as Arvore['intervencao'] }),
     }, h('option', { value: 'poda' }, 'Poda simples'), h('option', { value: 'supressao' }, 'Supressão'));
     (intervencao as HTMLSelectElement).value = a.intervencao;
     const linha = a.ponto
       ? `${info?.origem === 'gps' ? 'GPS da foto' : 'Marcada no mapa'} · ${milhar(Math.round(a.ponto[1]))} N · ${milhar(Math.round(a.ponto[0]))} E`
       : 'Sem posição: clique no mapa onde ela está.';
-    const carnauba = avisosArvores([a]).some((x) => x.codigo === 'ARVORE_CARNAUBA');
-    return h('div', { class: 'arvore', 'data-arvore': a.id },
+    const el = h('div', { class: 'arvore', 'data-arvore': a.id },
       url ? h('div', { class: 'foto' }, h('img', { src: url, alt: `Foto ${a.foto}` })) : h('div', { class: a.ponto ? 'foto' : 'foto sem' }, a.ponto ? '' : 'sem GPS'),
       h('div', {},
         h('div', { class: 't' }, especie),
         h('div', { class: a.ponto ? 'l' : 'l verm' }, `${a.foto} · ${linha}`),
         info?.aviso ? h('p', { class: 'nota am' }, info.aviso) : null,
-        carnauba ? h('p', { class: 'nota am' }, 'Carnaúba é espécie protegida (Decreto estadual 27.413/2004). Confirme com o órgão antes de cortar.') : null,
         h('div', { class: 'campos' },
           intervencao,
           h('button', {
-            type: 'button', class: 'botao mini', 'aria-pressed': esperando ? 'true' : 'false',
+            type: 'button', class: 'botao mini', 'data-foco': `${a.id}:colocar`, 'aria-pressed': esperando ? 'true' : 'false',
             onclick: () => estado.colocarArvore(a.id),
           }, esperando ? 'Cancelar o clique' : a.ponto ? 'Mover no mapa' : 'Clicar no mapa'),
           h('button', {
             type: 'button', class: 'botao mini', 'aria-label': `Tirar a árvore da foto ${a.foto}`,
             onclick: () => { soltarMiniatura(a.id); estado.removerArvore(a.id); },
           }, 'Tirar'))));
+    cartoesArvore.set(a.id, { chave, el });
+    return el;
   }
 
   function passo4(r: Retrato): Filho[] {
     const modo = r.modoMapa;
+    for (const id of [...cartoesArvore.keys()]) if (!r.arvores.some((a) => a.id === id)) cartoesArvore.delete(id);
     return [
       r.erroArvores ? h('p', { class: 'erro', role: 'alert' }, r.erroArvores) : null,
       zonaFotos('Jogue aqui as fotos das árvores. Se a foto tiver GPS, o site lê o lugar sozinho.', lerFotos, 'Escolher as fotos das árvores'),
@@ -510,8 +527,9 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const nomesComCartao = r.apps.map((a) => a.proposta.agua.nome);
     const cobertoPorCartao = (a: Aviso): boolean =>
       a.codigo === 'APP_POSSIVEL' && nomesComCartao.some((n) => a.texto.startsWith(`Rede nova a menos de 100 m de ${n}.`));
-    const outros = caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !cobertoPorCartao(a));
-    const texto = resumoTexto(caso, r.projeto?.os ?? '');
+    const outros = [...caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !cobertoPorCartao(a)), ...r.avisosEmArea];
+    const linhaDasArvores = linhaArvores(r.arvores, r.limpeza);
+    const texto = resumoTexto(caso, r.projeto?.os ?? '', [...(linhaDasArvores ? [linhaDasArvores] : []), ...r.avisosEmArea.map((a) => `Aviso: ${a.texto}`)]);
     const paraConferir = outros.length + r.appsPendentes;
     return [
       h('div', { class: 'resumo-topo' },
@@ -641,6 +659,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     // foco e rolagem sobrevivem ao redesenho (a tabela muda a cada clique)
     const ativo = document.activeElement as HTMLElement | null;
     const vaoFocado = ativo?.dataset?.vao ?? null;
+    const focoFocado = ativo?.dataset?.foco ?? null;
     const rolagem = raiz.querySelector('.tabela-rolagem')?.scrollTop ?? 0;
     const rolagemPainel = raiz.scrollTop;
 
@@ -649,7 +668,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       const bloqueado = n === 4 || n === 5 || n === 6 ? !r.caso : n === 3 ? !r.rede : n === 2 ? !r.base : false;
       const feito = (n === 1 && !!r.base) || (n === 2 && !!r.rede) || (n === 3 && atual > 3) || (n === 4 && atual > 4) || (n === 5 && atual > 5) || (n === 7 && !!conferencia);
       const aberto = !bloqueado && (abertura.get(n) ?? n === atual);
-      const classe = ['passo', feito ? 'feito' : '', n === atual ? 'atual' : '', bloqueado ? 'bloqueado' : '', ''].filter(Boolean).join(' ');
+      const classe = ['passo', feito ? 'feito' : '', n === atual ? 'atual' : '', bloqueado ? 'bloqueado' : ''].filter(Boolean).join(' ');
       const sumario = h('summary', {
         'aria-disabled': bloqueado ? 'true' : undefined,
         onclick: (e) => {
@@ -668,6 +687,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const tab = raiz.querySelector('.tabela-rolagem');
     if (tab) tab.scrollTop = rolagem;
     if (vaoFocado) raiz.querySelector<HTMLElement>(`[data-vao="${CSS.escape(vaoFocado)}"]`)?.focus();
+    if (focoFocado) raiz.querySelector<HTMLElement>(`[data-foco="${CSS.escape(focoFocado)}"]`)?.focus();
     if (copia === 'falhou') {
       // sem área de transferência: deixa o resumo selecionado para Ctrl+C
       const pre = raiz.querySelector('.resumo-txt');

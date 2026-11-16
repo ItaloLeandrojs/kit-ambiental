@@ -2,7 +2,7 @@
 // Não sabe de DOM nem de worker: quem monta a tela passa o leitor do KMZ e o armazém.
 import { lerAreasProtegidas, type BaseAreas } from '../nucleo/areas.ts';
 import { proporApps, refazerApp as refazerAppNoNucleo, confirmarApp as confirmarAppNoNucleo, type AppProposta } from '../nucleo/app.ts';
-import { avisosArvores, camadasArvores, posicaoDaFoto, type Arvore, type IntervencaoArvore } from '../nucleo/arvores.ts';
+import { avisosArvores, avisosEmArea, camadasArvores, posicaoDaFoto, type Arvore, type IntervencaoArvore } from '../nucleo/arvores.ts';
 import { montarCamadas, unificar } from '../nucleo/camadas.ts';
 import { calcularCaso, type AreaConfirmada, type Caso } from '../nucleo/caso.ts';
 import { conferirZip, type ItemConferencia } from '../nucleo/conferir.ts';
@@ -46,6 +46,7 @@ export interface Retrato {
   limpeza: Pt[][]; // áreas de limpeza de faixa já fechadas
   modoMapa: ModoMapa;
   avisosArvores: Aviso[];
+  avisosEmArea: Aviso[]; // árvore ou limpeza dentro de área protegida ou APP confirmada (passo 5)
   arvoresSemPonto: number;
   erroArvores: string | null;
 }
@@ -151,12 +152,16 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   let respostas = new Map<number, { resposta: RespostaApp; largura: number }>();
   let atual: Retrato;
 
+  const emArea = (): Aviso[] =>
+    base && (arvores.length > 0 || limpeza.length > 0)
+      ? avisosEmArea(arvores, limpeza, [...base.areas, ...confirmadas()])
+      : [];
   const montar = (): Retrato => ({
     base, rede, bloqueio, caso, ocupado, erro, erroPasso, trabalho, kmzNome, projeto, liberado,
     camadas: dxf ? camadasCandidatas(dxf) : [],
     apps, appsPendentes: apps.filter((a) => a.resposta === 'pendente').length, m2Postes,
     arvores, infoFotos, limpeza, modoMapa, erroArvores,
-    avisosArvores: avisosArvores(arvores), arvoresSemPonto: arvores.filter((a) => a.ponto === null).length,
+    avisosArvores: avisosArvores(arvores), avisosEmArea: emArea(), arvoresSemPonto: arvores.filter((a) => a.ponto === null).length,
   });
   // outro KMZ ou outro projeto: as árvores eram de outra obra
   const limparArvores = () => { arvores = []; infoFotos = {}; limpeza = []; modoMapa = null; erroArvores = null; };

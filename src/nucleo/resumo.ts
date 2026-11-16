@@ -32,7 +32,8 @@ function orgaoTexto(o: Orgao): string {
   return `Órgão: licencia ${licencia}; ${gestor}.`;
 }
 
-export function resumoTexto(caso: Caso, os: string): string {
+/** `extras`: linhas a mais antes dos avisos (ex.: a linha das árvores). */
+export function resumoTexto(caso: Caso, os: string, extras: string[] = []): string {
   const linhas: string[] = [];
   if (os.trim()) linhas.push(`OS ${os.trim()}`);
   if (caso.municipio) linhas.push(`Município: ${caso.municipio}`);
@@ -40,6 +41,7 @@ export function resumoTexto(caso: Caso, os: string): string {
     linhas.push(linhaDe(iv));
     linhas.push(iv.orgao ? orgaoTexto(iv.orgao) : 'Órgão: não identificado; consultar o P&M.');
   }
+  linhas.push(...extras);
   for (const a of caso.avisos) linhas.push(`Aviso: ${a.texto}`);
   return linhas.join('\n');
 }
