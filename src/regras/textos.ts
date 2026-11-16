@@ -10,5 +10,7 @@ export const TEXTOS = {
   shpDeslocado: 'o órgão devolve: shape não espacializado',
   // provisório: texto a confirmar com o Italo
   cruzaLinha: 'a rede nova cruza esta área, que no KMZ é só uma linha; consultar o P&M',
+  // provisório: texto a confirmar com o Italo
+  posteAConfirmar: 'ponto sem nome no KML tratado como poste novo; confirme no mapa',
   faixaDominio: 'precisa de processo DNIT/SOP',
 } as const;

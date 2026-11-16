@@ -247,13 +247,18 @@ export function proporRedeKml(f: Feicao[]): Rede {
   const postes: Poste[] = [];
   let nv = 0, np = 0;
   for (const x of f) {
-    const rotulo = [...x.pasta, x.nome].join(' ');
+    // `_` e `-` viram espaço: pastas como rede_mt e 0000000001_rede_bt casam por palavra
+    const rotulo = [...x.pasta, x.nome].join(' ').replace(/[_-]+/g, ' ');
+    const semNome = x.nome.trim() === '';
     for (const g of x.geometrias) {
       if (g.t === 'linha') {
         const tipo: TipoRede | null = /CONJUG|MT ?BT|MT-BT/i.test(rotulo) ? 'CONJ' : /\bMT\b/i.test(rotulo) ? 'MT' : /\bBT\b/i.test(rotulo) ? 'BT' : null;
         vaos.push({ id: `v${++nv}`, pts: g.pts, camada: x.pasta.concat(x.nome).join('/'), tipo, situacao: 'novo', motivo: 'linha do KML' });
       } else if (g.t === 'ponto' && /POSTE/i.test(x.nome)) {
         postes.push({ id: `p${++np}`, ponto: g.p, numero: null, novo: true, coordEscrita: null, etiqueta: null });
+      } else if (g.t === 'ponto' && semNome) {
+        // ponto sem nome no KML de rede: proposto como poste novo, a confirmar no mapa
+        postes.push({ id: `p${++np}`, ponto: g.p, numero: null, novo: true, coordEscrita: null, etiqueta: null, aConfirmar: true });
       }
     }
   }

@@ -54,6 +54,26 @@ function caixaDe(poligonos: Pt[][][], linhas: Pt[][]): [number, number, number, 
   return [x0, y0, x1, y1];
 }
 
+// O KMZ real tem anel que não fecha e vértice digitado errado (X na casa dos milhões).
+// Vértice fora do Ceará largo sai antes da caixa; anel aberto fecha repetindo o 1º ponto;
+// anel com menos de 4 pontos sai; sem o anel externo o polígono sai.
+const noCearaLargo = (p: Pt): boolean => p[0] >= 100_000 && p[0] <= 900_000 && p[1] >= 8_900_000 && p[1] <= 9_800_000;
+
+function limparAnel(anel: Pt[]): Pt[] | null {
+  const pts = anel.filter(noCearaLargo);
+  if (pts.length === 0) return null;
+  const [a, b] = [pts[0], pts[pts.length - 1]];
+  if (a[0] !== b[0] || a[1] !== b[1]) pts.push([a[0], a[1]]);
+  return pts.length >= 4 ? pts : null;
+}
+
+function limparPoligono(aneis: Pt[][]): Pt[][] | null {
+  const externo = aneis.length ? limparAnel(aneis[0]) : null;
+  if (!externo) return null;
+  const buracos = aneis.slice(1).map(limparAnel).filter((a): a is Pt[] => a !== null);
+  return [externo, ...buracos];
+}
+
 export function lerAreasProtegidas(bytes: Uint8Array, nomeArquivo: string): BaseAreas {
   const feicoes = lerKml(bytes);
   const areas: AreaProtegida[] = [];
@@ -62,8 +82,13 @@ export function lerAreasProtegidas(bytes: Uint8Array, nomeArquivo: string): Base
     const poligonos: Pt[][][] = [];
     const linhas: Pt[][] = [];
     for (const g of f.geometrias) {
-      if (g.t === 'poligono') poligonos.push(g.aneis);
-      else if (g.t === 'linha') linhas.push(g.pts);
+      if (g.t === 'poligono') {
+        const aneis = limparPoligono(g.aneis);
+        if (aneis) poligonos.push(aneis);
+      } else if (g.t === 'linha') {
+        const pts = g.pts.filter(noCearaLargo);
+        if (pts.length >= 2) linhas.push(pts);
+      }
     }
     if (!poligonos.length && !linhas.length) continue; // ponto sozinho fica fora
     const ehMunicipio = f.pasta.some((p) => semAcento(p).startsWith('MUNICIPIOS'));

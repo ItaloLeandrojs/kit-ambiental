@@ -242,6 +242,23 @@ describe('calcularCaso', () => {
     expect(JSON.stringify(caso)).not.toContain('sem área protegida');
   });
 
+  it('poste a confirmar (ponto sem nome no KML) dentro da APP: amarelo POSTE_A_CONFIRMAR e 2,856 m²', () => {
+    const app: AreaConfirmada = { nome: 'APP Inventada', tipo: 'APP', poligonos: [[retangulo(0, 0, 100, 100)]], largura: 100 };
+    const p: Poste = { ...poste('p1', pt(50, 50)), aConfirmar: true };
+    const caso = calcularCaso(rede([], [p]), base([]), [app]);
+    const aviso = caso.avisos.find((a) => a.codigo === 'POSTE_A_CONFIRMAR');
+    expect(aviso?.nivel).toBe('amarelo');
+    expect(aviso?.texto).toBe(TEXTOS.posteAConfirmar);
+    expect(caso.avisos.filter((a) => a.nivel === 'vermelho')).toEqual([]);
+    expect(caso.intervencoes).toHaveLength(1);
+    expect(caso.intervencoes[0].hectares).toBeCloseTo(0.0002856, 10);
+  });
+
+  it('poste com prova (do DXF ou com POSTE no nome): sem POSTE_A_CONFIRMAR', () => {
+    const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])], [poste('p1', pt(10, 50))]), base([]), []);
+    expect(caso.avisos.map((a) => a.codigo)).not.toContain('POSTE_A_CONFIRMAR');
+  });
+
   it('rio que passa por açude com APP confirmada só para o açude: o aviso do rio continua', () => {
     const acude = area('Açude Inventado', AGUA, 0, 100, 100, 200);
     const rio: AreaProtegida = {

@@ -164,6 +164,13 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
       comoCorrigir: 'Há poste novo mas nenhum vão marcado como novo; no mapa, marque os vãos que são rede nova (1), se houver.',
     });
   }
+  const aConfirmar = postesNovos.filter((p) => p.aConfirmar).length;
+  if (aConfirmar > 0) {
+    avisos.push({
+      nivel: 'amarelo', codigo: 'POSTE_A_CONFIRMAR', texto: TEXTOS.posteAConfirmar,
+      comoCorrigir: `No mapa, confira ${aConfirmar === 1 ? 'o ponto sem nome' : `os ${aConfirmar} pontos sem nome`} do KML de rede: se não for poste novo, tire o ponto do KML e abra o arquivo de novo.`,
+    });
+  }
   for (const iv of intervencoes) {
     if (iv.orgao === null) {
       avisos.push({

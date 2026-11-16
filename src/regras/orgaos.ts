@@ -35,6 +35,7 @@ export const REGRAS_ORGAOS: RegraOrgao[] = [
   { trecho: 'ASSENTAMENTO', categoria: 'Assentamento', esfera: 'federal', licencia: 'SEMACE', gestor: 'INCRA' },
   { trecho: 'TERRAS INDIGENAS', categoria: 'Terra indígena', esfera: 'federal', licencia: 'SEMACE', gestor: 'FUNAI' },
   { trecho: 'IPHAN', categoria: 'Patrimônio', esfera: 'federal', licencia: 'SEMACE', gestor: 'IPHAN' },
-  { trecho: 'DNOCS', categoria: 'Perímetro DNOCS', esfera: 'federal', licencia: 'SEMACE', gestor: 'DNOCS' },
+  // licenciador municipal, como nas Planilhas Padrão dos kits aprovados (a confirmar com a Enel)
+  { trecho: 'DNOCS', categoria: 'Perímetro DNOCS', esfera: 'federal', licencia: 'Município', gestor: 'DNOCS' },
   { trecho: 'MACROZONEAMENTO', categoria: 'Macrozona de Fortaleza', esfera: 'municipal', licencia: 'SEUMA', gestor: 'SEUMA' },
 ];

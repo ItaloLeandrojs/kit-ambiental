@@ -94,8 +94,29 @@ describe('lerAreasProtegidas', () => {
   });
 
   it('município sem nome usa o atributo Municipio', () => {
-    const b = lerAreasProtegidas(kmz(municipios(99) + pasta('Municípios_CE', placemark('', poligono(-30, -4), { Municipio: 'Cidade Inventada' }))), NOME);
+    const b = lerAreasProtegidas(kmz(municipios(99) + pasta('Municípios_CE', placemark('', poligono(-38.5, -4), { Municipio: 'Cidade Inventada' }))), NOME);
     expect(b.municipios[99].nome).toBe('Cidade Inventada');
+  });
+
+  it('anel aberto fecha repetindo o 1º ponto', () => {
+    const aberto = `<Polygon><outerBoundaryIs><LinearRing><coordinates>-39,-4 -38.95,-4 -38.95,-3.95 -39,-3.95</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
+    const b = lerAreasProtegidas(kmz(municipios() + pasta('Açudes', placemark('Aberto', aberto))), NOME);
+    const anel = achar(b.areas, 'Aberto').poligonos[0][0];
+    expect(anel).toHaveLength(5);
+    expect(anel[4]).toEqual(anel[0]);
+  });
+
+  it('vértice fora do Ceará sai antes da caixa; anel que fica curto sai', () => {
+    // um vértice com longitude 10 cai a milhões de metros, como o erro de digitação do KMZ real
+    const absurdo = `<Polygon><outerBoundaryIs><LinearRing><coordinates>-39,-4 -38.95,-4 10,-4 -38.95,-3.95 -39,-3.95 -39,-4</coordinates></LinearRing></outerBoundaryIs>` +
+      `<innerBoundaryIs><LinearRing><coordinates>-38.99,-3.99 10,-3.99 -38.98,-3.98 -38.99,-3.99</coordinates></LinearRing></innerBoundaryIs></Polygon>`;
+    const b = lerAreasProtegidas(kmz(municipios() + pasta('Açudes', placemark('Absurdo', absurdo))), NOME);
+    const a = achar(b.areas, 'Absurdo');
+    expect(a.poligonos).toHaveLength(1);
+    expect(a.poligonos[0]).toHaveLength(1); // o buraco ficou com 3 pontos e saiu
+    expect(a.poligonos[0][0]).toHaveLength(5);
+    expect(a.caixa[2]).toBeLessThan(900_000);
+    expect(a.caixa[2] - a.caixa[0]).toBeLessThan(10_000);
   });
 
   it('dá o erro exato em KML de rede, sem a pasta de municípios ou com poucos municípios', () => {
@@ -157,7 +178,8 @@ describe('orgaoDaArea', () => {
     for (const [p, [cat, gestor]] of Object.entries(esperado)) {
       const o = orgaoDaArea(mk(p))!;
       expect([o.categoria, o.gestor]).toEqual([cat, gestor]);
-      expect(o.licencia).toBe('SEMACE');
+      // perímetro DNOCS: licenciador municipal, como nas Planilhas Padrão (decisão do Italo)
+      expect(o.licencia).toBe(gestor === 'DNOCS' ? 'Município' : 'SEMACE');
     }
   });
 });

@@ -279,4 +279,27 @@ describe('proporRedeKml', () => {
     expect(r.vaos[0].pts).toHaveLength(3);
     expect(r.postes).toEqual([{ id: 'p1', ponto: [3, 3], numero: null, novo: true, coordEscrita: null, etiqueta: null }]);
   });
+
+  it('_ e - viram espaço: pastas rede_mt e 0000000001_rede_bt dão MT e BT', () => {
+    const r = proporRedeKml([
+      f(['rede_mt'], '', [{ t: 'linha', pts: [[0, 0], [10, 0]] }]),
+      f(['0000000001_rede_bt'], '', [{ t: 'linha', pts: [[0, 5], [10, 5]] }]),
+      f(['rede-conjugada'], '', [{ t: 'linha', pts: [[0, 9], [10, 9]] }]),
+      f(['rede_mt_bt'], '', [{ t: 'linha', pts: [[0, 12], [10, 12]] }]),
+      f(['admt'], '', [{ t: 'linha', pts: [[0, 15], [10, 15]] }]),
+    ]);
+    expect(r.vaos.map((v) => v.tipo)).toEqual(['MT', 'BT', 'CONJ', 'CONJ', null]);
+  });
+
+  it('ponto sem nome vira poste novo a confirmar; ponto com outro nome continua fora', () => {
+    const r = proporRedeKml([
+      f(['0000000001_poste_e_trafo'], '', [{ t: 'ponto', p: [1, 1] }]),
+      f(['X'], '  ', [{ t: 'ponto', p: [2, 2] }]),
+      f(['X'], 'P7', [{ t: 'ponto', p: [3, 3] }]),
+      f(['X'], 'POSTE 1', [{ t: 'ponto', p: [4, 4] }]),
+    ]);
+    expect(r.postes.map((p) => [p.ponto, p.novo, p.aConfirmar ?? false])).toEqual([
+      [[1, 1], true, true], [[2, 2], true, true], [[4, 4], true, false],
+    ]);
+  });
 });

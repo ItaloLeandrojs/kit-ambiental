@@ -122,11 +122,43 @@ describe('conferirZip: cópias estragadas, uma por teste', () => {
     expect(vermelhos(r).filter((c) => c === 'UNIFICADO')).toHaveLength(2);
   });
 
-  it('SHP sem KML e KML sem SHP: PAR vermelho', () => {
-    const r1 = conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} KML/${OS} POSTES.kml`)));
+  it('rede só no SHP ou só no KML: PAR vermelho', () => {
+    const r1 = conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} KML/${OS} REDE BT.kml`)));
     expect(vermelhos(r1)).toEqual(['PAR']);
-    const r2 = conferirZip(montarZip(base.filter((a) => !a.caminho.startsWith(`${OS} SHAPEFILE/${OS} POSTES.`))));
+    const r2 = conferirZip(montarZip(base.filter((a) => !a.caminho.startsWith(`${OS} SHAPEFILE/${OS} REDE BT.`))));
     expect(vermelhos(r2)).toEqual(['PAR']);
+  });
+
+  it('outra camada só no SHP ou só no KML: PAR amarelo, confira se é sobra', () => {
+    for (const r of [
+      conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} KML/${OS} POSTES.kml`))),
+      conferirZip(montarZip(base.filter((a) => !a.caminho.startsWith(`${OS} SHAPEFILE/${OS} POSTES.`)))),
+    ]) {
+      expect(vermelhos(r)).toEqual([]);
+      const it = r.find((i) => i.codigo === 'PAR');
+      expect(it?.nivel).toBe('amarelo');
+      expect(it?.titulo).toContain('confira se é sobra');
+      expect(it?.porque).not.toBe('');
+    }
+  });
+
+  it('.shx solto, sem o .shp: SHP_INCOMPLETO amarelo, como sobra', () => {
+    const solto = { caminho: `${OS} SHAPEFILE/${OS} RIACHO.shx`, bytes: base.find((a) => a.caminho === `${OS} SHAPEFILE/${OS} POSTES.shx`)!.bytes };
+    const r = conferirZip(montarZip([...base, solto]));
+    expect(vermelhos(r)).toEqual([]);
+    expect(codigos(r, 'amarelo')).toEqual(['SHP_INCOMPLETO']);
+    expect(r.find((i) => i.codigo === 'SHP_INCOMPLETO')?.titulo).toContain('sem o .shp');
+  });
+
+  it('com o .shp e sem o .shx: SHP_INCOMPLETO continua vermelho', () => {
+    const r = conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} SHAPEFILE/${OS} POSTES.shx`)));
+    expect(vermelhos(r)).toEqual(['SHP_INCOMPLETO']);
+  });
+
+  it('KML de rede com o shapefile sem .shp: a rede fica sem par, vermelho', () => {
+    const r = conferirZip(montarZip(base.filter((a) => a.caminho !== `${OS} SHAPEFILE/${OS} REDE BT.shp`)));
+    expect(vermelhos(r)).toEqual(['PAR']);
+    expect(codigos(r, 'amarelo')).toContain('SHP_INCOMPLETO');
   });
 
   it('SHP sem KML com o desenho igual ao de outro SHP: amarelo, arquivo repetido', () => {

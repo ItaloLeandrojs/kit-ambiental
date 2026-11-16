@@ -20,7 +20,7 @@ describe.skipIf(!existsSync(KMZ))('KMZ de Áreas Protegidas (Rev. 37)', () => {
     expect(base.areas).toHaveLength(comGeo.length - deMunicipio.length);
     expect(base.revisao).toBe('37');
     expect(base.data).toBe('12/11/2024');
-  });
+  }, 120_000); // relê o KMZ de 46 MB; com a suíte inteira em paralelo passa de 5 s
 
   it('nenhuma área nem município com nome vazio', () => {
     expect([...base.areas, ...base.municipios].filter((a) => !a.nome.trim())).toEqual([]);
