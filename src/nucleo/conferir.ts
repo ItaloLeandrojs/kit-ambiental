@@ -111,15 +111,23 @@ function piorDistancia(de: Geometria[], ate: Geometria[]): number {
 }
 const comprimentoDe = (gs: Geometria[]): number => gs.reduce((s, g) => s + (g.t === 'linha' && g.pts.length >= 2 ? G.comprimento(G.linha(g.pts)) : 0), 0);
 
-// ---- tipo esperado pelo nome da camada (o nome já vem normalizado) ----
-function tipoEsperado(norm: string): TipoCamada | null {
-  if (/poligono/.test(norm)) return 'poligono';
-  if (/\brede\b/.test(norm)) return 'linha';
-  if (/poste|\bpoda|supress|\buc\b|trafo/.test(norm)) return 'ponto';
-  if (/\bapp\b|limpeza/.test(norm)) return 'poligono';
-  return null;
+// ---- tipos aceitos pelo nome da camada (o nome já vem normalizado) ----
+// Cada palavra-chave só vale como palavra inteira. Se o nome casa com regras que aceitam tipos
+// diferentes, a camada não é conferida (as áreas do KMZ levam o nome do órgão, que pode ter qualquer palavra).
+const REGRAS_TIPO: [RegExp, TipoCamada[]][] = [
+  [/\bpoligono\b/, ['poligono']],
+  [/\brede\b/, ['linha']],
+  [/\b(postes?|podas?|supressao|supressoes|trafos?)\b/, ['ponto']],
+  [/\buc\b/, ['ponto', 'poligono']],
+  [/\b(app|limpeza)\b/, ['poligono']],
+];
+function tiposAceitos(norm: string): TipoCamada[] | null {
+  const achados = REGRAS_TIPO.filter(([re]) => re.test(norm)).map(([, t]) => t);
+  if (achados.length === 0) return null;
+  const chave = (t: TipoCamada[]): string => [...t].sort().join('|');
+  return achados.every((t) => chave(t) === chave(achados[0])) ? achados[0] : null;
 }
-const ehRede = (norm: string): boolean => tipoEsperado(norm) === 'linha';
+const ehRede = (norm: string): boolean => tiposAceitos(norm)?.join() === 'linha';
 const ehUnificado = (norm: string): boolean => /unificado/.test(norm);
 
 interface CamadaKml { caminho: string; base: string; norm: string; geo: Geometria[]; ilegivel: boolean }
@@ -322,20 +330,20 @@ export function conferirZip(bytes: Uint8Array, dxf?: Uint8Array): ItemConferenci
   let tiposConferidos = 0;
   const checaTipo = (nome: string, norm: string, real: TipoCamada | null, caminhos: string[]): void => {
     if (ehUnificado(norm)) return;
-    const esperado = tipoEsperado(norm);
-    if (!esperado || !real) return;
+    const aceitos = tiposAceitos(norm);
+    if (!aceitos || !real) return;
     tiposConferidos++;
-    if (real === esperado) return;
+    if (aceitos.includes(real)) return;
     tiposRuins++;
     const rotulo = nome.replace(/^\s*\d{8,10}[\s_-]*/, '');
-    itens.push(item('vermelho', 'TIPO', `${rotulo} desenhada como ${NOME_TIPO[real]}, devia ser ${NOME_TIPO[esperado]}`,
+    itens.push(item('vermelho', 'TIPO', `${rotulo} desenhada como ${NOME_TIPO[real]}, devia ser ${aceitos.map((t) => NOME_TIPO[t]).join(' ou ')}`,
       'O órgão lê cada camada pelo tipo de desenho: rede é linha; poste, poda, supressão, UC e trafo são ponto; APP, limpeza e polígono são área. Com o tipo trocado ele não calcula o que precisa.',
-      `Desenhe a camada como ${NOME_TIPO[esperado]} e grave o KML e o shapefile de novo.`, caminhos));
+      `Desenhe a camada como ${aceitos.map((t) => NOME_TIPO[t]).join(' ou ')} e grave o KML e o shapefile de novo.`, caminhos));
   };
   for (const k of kmls) {
     const ts = [...new Set(k.geo.map((g) => g.t))];
-    const esperado = tipoEsperado(k.norm);
-    checaTipo(k.base, k.norm, ts.length === 0 ? null : ts.find((t) => t !== esperado) ?? ts[0], [k.caminho]);
+    const aceitos = tiposAceitos(k.norm) ?? [];
+    checaTipo(k.base, k.norm, ts.length === 0 ? null : ts.find((t) => !aceitos.includes(t)) ?? ts[0], [k.caminho]);
   }
   for (const s of shps) checaTipo(s.base, s.norm, s.tipo, s.caminhos);
   if (tiposRuins === 0 && tiposConferidos > 0) itens.push(verde('TIPO', 'Tipos de desenho certos', `As ${tiposConferidos} camadas conferidas estão como ponto, linha ou polígono, conforme o nome.`));

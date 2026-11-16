@@ -214,3 +214,67 @@ describe('conferirZip: kit de verdade (nomes, pastas, zip dentro de zip)', () =>
     expect(codigos(r, 'verde')).toContain('PAR');
   });
 });
+
+describe('conferirZip: TIPO só onde o nome manda', () => {
+  const poli = (nome: string): CamadaKit => appPoligono(nome);
+  it('área em polígono com UC ou REDE no nome e água em linha, como o site grava, não dão TIPO vermelho', () => {
+    const agua: CamadaKit = { nome: `${OS} AÇUDE SECO`, tipo: 'linha', feicoes: [{ name: 'A', geometria: [{ t: 'linha', pts: [[X + 10, Y - 20], [X + 90, Y - 20]] }] }] };
+    const cs = [rede, postes, poli(`${OS} UC SERRA AZUL`), poli(`${OS} RESERVA REDE UC`), poli(`${OS} PARQUE REDEMOINHO`), agua];
+    const r = conferirZip(kit(cs));
+    expect(r.filter((i) => i.codigo === 'TIPO' && i.nivel === 'vermelho')).toEqual([]);
+    expect(vermelhos(r)).toEqual([]);
+  });
+  it('UC também aceita ponto', () => {
+    const uc: CamadaKit = { nome: `${OS} UC`, tipo: 'ponto', feicoes: [{ name: 'UC', geometria: [{ t: 'ponto', p: [X + 5, Y + 5] }] }] };
+    expect(vermelhos(conferirZip(kit([rede, postes, uc])))).toEqual([]);
+  });
+  it('APP em linha continua vermelha', () => {
+    const linha: CamadaKit = { nome: `${OS} APP DO RIO`, tipo: 'linha', feicoes: [{ name: 'APP', geometria: [{ t: 'linha', pts: [[X, Y], [X + 9, Y]] }] }] };
+    expect(vermelhos(conferirZip(kit([rede, postes, linha])))).toContain('TIPO');
+  });
+});
+
+describe('conferirZip: pareamento pela geometria', () => {
+  it('nomes sem par, mesma caixa a até 5 m: fazem par, sem vermelho PAR', () => {
+    const nome = `${OS} SHAPEFILE/${OS} APP DO AÇUDE`;
+    const antigo = camadas()[2];
+    const mexida: CamadaKit = { ...antigo, feicoes: antigo.feicoes.map((f) => ({ ...f, geometria: f.geometria.map((g) => (g.t === 'poligono' ? { t: 'poligono' as const, aneis: g.aneis.map((a) => a.map(([x, y]): [number, number] => [x + 3, y])) } : g)) })) };
+    const g = gravarShp(mexida);
+    const novos: Record<string, Uint8Array> = { shp: g.shp, shx: g.shx, dbf: g.dbf, prj: enc.encode(g.prj), cpg: enc.encode(g.cpg) };
+    const arqs = kitArquivos().map((a) => {
+      const e = a.caminho.slice(a.caminho.lastIndexOf('.') + 1);
+      return a.caminho.startsWith(nome + '.') ? { caminho: `${OS} SHAPEFILE/NOME QUALQUER ${OS}.${e}`, bytes: novos[e] } : a;
+    });
+    const r = conferirZip(montarZip(arqs));
+    expect(vermelhos(r)).toEqual([]);
+    expect(codigos(r, 'verde')).toContain('PAR');
+  });
+});
+
+describe('conferirZip: metros contra o DXF', () => {
+  type Par = [number, string | number];
+  const texto = (pares: Par[]) => pares.map(([c, v]) => `${String(c).padStart(3)}\n${v}`).join('\n') + '\n';
+  // um vão BT novo por LINE, com cota "(1)<>" em cima
+  const vao = (x0: number, y0: number, x1: number, y1: number): Par[] => [
+    [0, 'LINE'], [8, 'LINHABT'], [10, x0], [20, y0], [11, x1], [21, y1],
+    [0, 'DIMENSION'], [8, 'COTAS'], [3, 'EST1'], [13, x0], [23, y0], [14, x1], [24, y1], [42, Math.hypot(x1 - x0, y1 - y0)],
+  ];
+  const dxf = (vaos: Par[]): Uint8Array =>
+    enc.encode(texto([
+      [0, 'SECTION'], [2, 'HEADER'], [9, '$ACADVER'], [1, 'AC1027'], [0, 'ENDSEC'],
+      [0, 'SECTION'], [2, 'TABLES'], [0, 'DIMSTYLE'], [2, 'EST1'], [3, '(1)<>'], [0, 'ENDSEC'],
+      [0, 'SECTION'], [2, 'ENTITIES'], ...vaos, [0, 'ENDSEC'], [0, 'EOF'],
+    ]));
+  const igual = [...vao(X, Y, X + 50, Y), ...vao(X + 50, Y, X + 50, Y + 40)]; // 90 m, como a rede do kit
+  it('DXF com os mesmos 90 m: COMPRIMENTO verde, com o DXF na conta', () => {
+    const r = conferirZip(kit(), dxf(igual));
+    expect(vermelhos(r)).toEqual([]);
+    expect(r.find((i) => i.codigo === 'COMPRIMENTO')?.porque).toContain('DXF');
+  });
+  it('DXF com um vão a mais: COMPRIMENTO vermelho', () => {
+    const r = conferirZip(kit(), dxf([...igual, ...vao(X + 50, Y + 40, X + 50, Y + 90)]));
+    const it = r.find((i) => i.codigo === 'COMPRIMENTO');
+    expect(it?.nivel).toBe('vermelho');
+    expect(it?.titulo).toContain('DXF');
+  });
+});
