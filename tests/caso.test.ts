@@ -278,6 +278,40 @@ describe('calcularCaso', () => {
     expect(soVao.avisos.map((a) => [a.codigo, a.nivel])).toEqual([['SEM_REDE_NOVA', 'vermelho'], ['VAO_SEM_TIPO', 'vermelho']]);
   });
 
+  // quadrado de 100 m com um laço que sai do meio do lado de cima e volta ao mesmo ponto: o JSTS lança ao cruzar
+  const laco = (x0: number, y0: number): Pt[] => [
+    pt(x0, y0), pt(x0 + 100, y0), pt(x0 + 100, y0 + 100), pt(x0 + 50, y0 + 100), pt(x0 + 70, y0 + 50), pt(x0 + 30, y0 + 50),
+    pt(x0 + 50, y0 + 100), pt(x0, y0 + 100), pt(x0, y0),
+  ];
+
+  it('área cujo cruzamento lança no JSTS: vermelho AREA_NAO_CONFERIDA com o nome, e o resto do caso segue', () => {
+    const ruim: AreaProtegida = { ...area('UC Quebrada', UC_ESTADUAL, 0, 0, 100, 100), poligonos: [[laco(0, 0)]] };
+    const boa = area('UC Boa', UC_ESTADUAL, 200, 0, 300, 100);
+    const r = rede([vao('a', 'BT', [pt(-20, 60), pt(320, 60)])]);
+    const caso = calcularCaso(r, base([ruim, boa]), []);
+    expect(caso.intervencoes.map((iv) => iv.area.nome)).toEqual(['UC Boa']);
+    const aviso = caso.avisos.find((a) => a.codigo === 'AREA_NAO_CONFERIDA');
+    expect(aviso?.nivel).toBe('vermelho');
+    expect(aviso?.texto).toBe(`UC Quebrada: ${TEXTOS.areaNaoConferida}`);
+    expect(aviso?.comoCorrigir).toContain('UC Quebrada');
+    expect(JSON.stringify(caso.avisos)).not.toMatch(/non-noded|Exception/i);
+  });
+
+  it('área com defeito na leitura perto da rede: vermelho AREA_NAO_CONFERIDA, sem conta; longe, nada', () => {
+    const ruim: AreaProtegida = { ...area('UC Com Defeito', UC_ESTADUAL, 0, 0, 100, 100), defeito: true };
+    const perto = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([ruim]), []);
+    expect(perto.intervencoes).toEqual([]);
+    expect(perto.avisos.filter((a) => a.nivel === 'vermelho').map((a) => a.texto)).toEqual([`UC Com Defeito: ${TEXTOS.areaNaoConferida}`]);
+    const longe = calcularCaso(rede([vao('a', 'BT', [pt(1000, 50), pt(1055, 50)])]), base([ruim]), []);
+    expect(longe.avisos.map((a) => a.codigo)).not.toContain('AREA_NAO_CONFERIDA');
+  });
+
+  it('água com defeito perto da rede também avisa: a APP dela não pôde ser conferida', () => {
+    const agua: AreaProtegida = { ...area('Açude Com Defeito', AGUA, 0, 0, 100, 100), poligonos: [[laco(0, 0)]], defeito: true };
+    const caso = calcularCaso(rede([vao('a', 'BT', [pt(150, 50), pt(160, 50)])]), base([agua]), []);
+    expect(caso.avisos.find((a) => a.codigo === 'AREA_NAO_CONFERIDA')?.texto).toBe(`Açude Com Defeito: ${TEXTOS.areaNaoConferida}`);
+  });
+
   it('poste com prova (do DXF ou com POSTE no nome): sem POSTE_A_CONFIRMAR', () => {
     const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])], [poste('p1', pt(10, 50))]), base([]), []);
     expect(caso.avisos.map((a) => a.codigo)).not.toContain('POSTE_A_CONFIRMAR');

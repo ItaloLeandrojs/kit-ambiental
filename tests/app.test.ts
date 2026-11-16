@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Poste, Pt, Rede, Vao } from '../src/nucleo/tipos.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import { calcularCaso } from '../src/nucleo/caso.ts';
-import { confirmarApp, proporApps, refazerApp } from '../src/nucleo/app.ts';
+import { confirmarApp, ERRO_APP_SEM_DESENHO, proporApps, refazerApp } from '../src/nucleo/app.ts';
 import { G } from '../src/nucleo/geom.ts';
 import { LARGURA_APP } from '../src/regras/faixas.ts';
 
@@ -154,5 +154,29 @@ describe('confirmarApp', () => {
     const depois = calcularCaso(r, b, [confirmarApp(so)]).avisos.filter((a) => a.codigo === 'APP_POSSIVEL');
     expect(depois).toHaveLength(1);
     expect(depois[0].texto).toContain('Outro Açude');
+  });
+});
+
+describe('água com desenho quebrado', () => {
+  // açude de 100 m com um laço que sai do meio do lado de cima e volta ao mesmo ponto: o JSTS lança ao recortar
+  const laco: Pt[] = [pt(0, 0), pt(100, 0), pt(100, 100), pt(50, 100), pt(70, 50), pt(30, 50), pt(50, 100), pt(0, 100), pt(0, 0)];
+  const quebrado = (): AreaProtegida => ({ ...acude('Açude Quebrado', 0, 0, 100, 100), poligonos: [[laco]] });
+  const perto = rede([vao([pt(130, 0), pt(130, 100)])]);
+
+  it('o desenho da APP que lança no JSTS vira proposta sem desenho, sem lançar; confirmar dá o erro claro', () => {
+    const apps = proporApps(perto, base([quebrado(), acude('Açude Bom', 200, 0, 300, 100)]));
+    expect(apps.map((a) => a.agua.nome)).toEqual(['Açude Quebrado', 'Açude Bom']);
+    const [ruim, bom] = apps;
+    expect(ruim.semDesenho).toBe(true);
+    expect(ruim.poligonos).toEqual([]);
+    expect(bom.semDesenho).toBeUndefined();
+    expect(() => refazerApp(ruim, 50)).not.toThrow();
+    expect(refazerApp(ruim, 50).semDesenho).toBe(true);
+    expect(() => confirmarApp(ruim)).toThrow(ERRO_APP_SEM_DESENHO);
+  });
+
+  it('água marcada com defeito na leitura não ganha proposta (o caso já dá o vermelho dela)', () => {
+    const agua: AreaProtegida = { ...quebrado(), defeito: true };
+    expect(proporApps(perto, base([agua]))).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 // Estado da tela: liga o núcleo aos passos 1 a 3 (KMZ, projeto e confirmação da rede).
 // Não sabe de DOM nem de worker: quem monta a tela passa o leitor do KMZ e o armazém.
-import { lerAreasProtegidas, type BaseAreas } from '../nucleo/areas.ts';
-import { proporApps, refazerApp as refazerAppNoNucleo, confirmarApp as confirmarAppNoNucleo, type AppProposta } from '../nucleo/app.ts';
+import { lerAreasProtegidas, VERSAO_LEITURA, type BaseAreas } from '../nucleo/areas.ts';
+import { proporApps, refazerApp as refazerAppNoNucleo, confirmarApp as confirmarAppNoNucleo, ERRO_APP_SEM_DESENHO, type AppProposta } from '../nucleo/app.ts';
 import { avisosArvores, avisosEmArea, camadasArvores, posicaoDaFoto, type Arvore, type IntervencaoArvore } from '../nucleo/arvores.ts';
 import { montarCamadas, unificar } from '../nucleo/camadas.ts';
 import { calcularCaso, type AreaConfirmada, type Caso } from '../nucleo/caso.ts';
@@ -113,6 +113,13 @@ export const ERRO_LIMPEZA_CURTA = 'A limpeza de faixa precisa de pelo menos 3 ca
 export const ERRO_SEM_CASO = 'Falta o caso: abra o KMZ e o projeto, e resolva os avisos vermelhos.';
 export const ERRO_LARGURA = 'A largura da APP precisa ser um número maior que zero, em metros.';
 export const ERRO_SEM_KMZ = 'Abra primeiro o KMZ de Áreas Protegidas (passo 1).';
+export const ERRO_CALCULO = 'Não consegui cruzar a rede nova com as áreas do KMZ: a conta deu erro. O caso e o resumo não valem até isso ser resolvido.';
+export const ERRO_BASE_ANTIGA = 'O KMZ guardado neste computador foi lido por uma versão antiga do site. Abra o KMZ de Áreas Protegidas de novo.';
+// a conta lançou (ex.: polígono quebrado no JSTS): vermelho claro, sem o erro em inglês, e nada do caso velho
+const FALHA_NO_CALCULO: Aviso = {
+  nivel: 'vermelho', codigo: 'CALCULO_FALHOU', texto: ERRO_CALCULO,
+  comoCorrigir: 'Confira a rede no mapa e tente de novo. Se o erro continuar, avise o responsável pelo site e mande o projeto e o KMZ: sem a conta o kit não sai.',
+};
 const CHAVE_BASE = 'base';
 const chaveMalha = (tipo: TipoMalha): string => `malha-${tipo}`;
 const TIPOS_MALHA: TipoMalha[] = ['DNIT', 'SOP', 'FERROVIA'];
@@ -186,10 +193,18 @@ export function criarEstado(deps: Dependencias = {}): Estado {
 
   const confirmadas = (): AreaConfirmada[] =>
     apps.filter((a) => a.resposta === 'confirmada').map((a) => confirmarAppNoNucleo(a.proposta));
+  // a conta lançou: some tudo o que veio dela e fica o vermelho (nunca o caso de antes na tela)
+  const falhou = () => { bloqueio = FALHA_NO_CALCULO; caso = null; apps = []; faixa = []; };
   // faixa de domínio só existe com caso pronto: a conta com JSTS é pesada, por isso fica guardada
-  const calcularFaixa = () => { faixa = rede && base && !bloqueio ? avisosFaixa(rede, malhas) : []; };
+  const calcularFaixa = () => {
+    faixa = [];
+    if (!rede || !base || bloqueio) return;
+    try { faixa = avisosFaixa(rede, malhas); } catch { falhou(); }
+  };
   const calcular = () => {
-    caso = rede && base && !bloqueio ? calcularCaso(rede, base, confirmadas(), m2Postes) : null;
+    caso = null;
+    if (!rede || !base || bloqueio) return;
+    try { caso = calcularCaso(rede, base, confirmadas(), m2Postes); } catch { falhou(); }
   };
   // propõe as APPs de novo e devolve as respostas que ainda valem
   function propor() {
@@ -206,7 +221,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
           try { confirmarAppNoNucleo(proposta); } catch { resposta = 'pendente'; }
         }
       }
-      apps.push({ proposta, resposta, erro: null });
+      apps.push({ proposta, resposta, erro: proposta.semDesenho ? ERRO_APP_SEM_DESENHO : null });
     }
   }
   const guardarResposta = (a: AppDoCaso) => respostas.set(a.proposta.agua.id, { resposta: a.resposta, largura: a.proposta.largura });
@@ -217,15 +232,19 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     apps = [];
     faixa = [];
     if (!rede || !base) return;
-    const local = conferirLocal(rede, base.municipios);
-    const etiqueta = conferirEtiquetas(rede).aviso;
-    const chave = etiqueta?.texto ?? '';
-    if (chave !== chaveEtiqueta) { liberado = false; chaveEtiqueta = chave; }
-    let b: Aviso | null = local ?? etiqueta;
-    if (b?.codigo === 'ETIQUETA_LONGE' && liberado) b = null; // só a etiqueta se libera; FORA_UTM e FORA_CEARA não
-    bloqueio = b;
-    if (!b) { propor(); calcular(); }
-    calcularFaixa();
+    try {
+      const local = conferirLocal(rede, base.municipios);
+      const etiqueta = conferirEtiquetas(rede).aviso;
+      const chave = etiqueta?.texto ?? '';
+      if (chave !== chaveEtiqueta) { liberado = false; chaveEtiqueta = chave; }
+      let b: Aviso | null = local ?? etiqueta;
+      if (b?.codigo === 'ETIQUETA_LONGE' && liberado) b = null; // só a etiqueta se libera; FORA_UTM e FORA_CEARA não
+      bloqueio = b;
+      if (!b) { propor(); calcular(); }
+      calcularFaixa();
+    } catch {
+      falhou();
+    }
   }
 
   function prontoParaBaixar() {
@@ -245,10 +264,15 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     async iniciar() {
       if (!armazem) return;
       try {
-        const guardado = (await armazem.ler(CHAVE_BASE)) as { nome: string; base: BaseAreas } | undefined;
+        const guardado = (await armazem.ler(CHAVE_BASE)) as { nome: string; base: BaseAreas; versao?: number } | undefined;
         if (guardado?.base && Array.isArray(guardado.base.areas) && Array.isArray(guardado.base.municipios)) {
-          base = guardado.base;
-          kmzNome = guardado.nome ?? null;
+          if (guardado.versao === VERSAO_LEITURA) {
+            base = guardado.base;
+            kmzNome = guardado.nome ?? null;
+          } else {
+            // lida antes do conserto dos polígonos: pede o KMZ de novo em vez de usar a base sem conserto
+            erro = ERRO_BASE_ANTIGA; erroPasso = 1;
+          }
           avisar();
         }
       } catch {
@@ -278,7 +302,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         respostas = new Map(); m2Postes = {}; limparArvores();
         recalcular();
         if (armazem) {
-          try { await armazem.guardar(CHAVE_BASE, { nome, base: lida }); } catch { /* segue sem guardar */ }
+          try { await armazem.guardar(CHAVE_BASE, { nome, base: lida, versao: VERSAO_LEITURA }); } catch { /* segue sem guardar */ }
         }
       } catch (e) {
         erro = mensagem(e); erroPasso = 1;
@@ -409,7 +433,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
       if (!a) return;
       if (!Number.isFinite(largura) || largura <= 0) { a.erro = ERRO_LARGURA; avisar(); return; }
       a.proposta = refazerAppNoNucleo(a.proposta, largura);
-      a.erro = null;
+      a.erro = a.proposta.semDesenho ? ERRO_APP_SEM_DESENHO : null;
       if (a.resposta === 'confirmada') a.resposta = 'pendente'; // a largura mudou: precisa confirmar de novo
       guardarResposta(a);
       calcular();

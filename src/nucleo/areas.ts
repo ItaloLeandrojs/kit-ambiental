@@ -1,5 +1,6 @@
 import type { Pt } from './tipos.ts';
 import { lerKml } from './kml.ts';
+import { G } from './geom.ts';
 import { REGRAS_ORGAOS, type RegraOrgao } from '../regras/orgaos.ts';
 
 export interface AreaProtegida {
@@ -10,6 +11,8 @@ export interface AreaProtegida {
   poligonos: Pt[][][];
   linhas: Pt[][];
   caixa: [number, number, number, number];
+  // polígono inválido que o conserto da leitura não resolveu: o caso não cruza a rede com ele e avisa em vermelho
+  defeito?: true;
 }
 export interface BaseAreas { revisao: string; data: string; areas: AreaProtegida[]; municipios: AreaProtegida[] }
 export interface Orgao { categoria: string; esfera: string; licencia: string; gestor: string; soIcmbio?: boolean; aConfirmar?: string }
@@ -74,17 +77,48 @@ function limparPoligono(aneis: Pt[][]): Pt[][] | null {
   return [externo, ...buracos];
 }
 
-export function lerAreasProtegidas(bytes: Uint8Array, nomeArquivo: string): BaseAreas {
+// O KMZ real tem polígonos inválidos para o JSTS (anel que se toca, furo que encosta no anel): o cruzamento lança
+// "non-noded intersection". Buffer zero refaz o polígono válido; só vale se a área quase não muda.
+// muda quando o jeito de ler o KMZ muda (ex.: o conserto dos polígonos): a base guardada de antes é pedida de novo
+export const VERSAO_LEITURA = 2;
+export const TOL_CONSERTO = 0.05; // fração da área: acima disso o conserto mudaria a área demais
+
+export interface Conserto { poligonos: Pt[][][]; consertado: boolean; defeito: boolean; areaAntes: number; areaDepois: number }
+
+export function consertarPoligono(aneis: Pt[][]): Conserto {
+  const g = G.poligono(aneis);
+  const areaAntes = G.area(g);
+  if (G.valido(g)) return { poligonos: [aneis], consertado: false, defeito: false, areaAntes, areaDepois: areaAntes };
+  try {
+    const b = G.engrossa(g, 0);
+    const areaDepois = G.area(b);
+    const partes = G.poligonos(b);
+    const perto = Math.abs(areaDepois - areaAntes) <= TOL_CONSERTO * Math.abs(areaAntes);
+    if (partes.length > 0 && G.valido(b) && perto) return { poligonos: partes, consertado: true, defeito: false, areaAntes, areaDepois };
+    return { poligonos: [aneis], consertado: false, defeito: true, areaAntes, areaDepois };
+  } catch {
+    return { poligonos: [aneis], consertado: false, defeito: true, areaAntes, areaDepois: NaN };
+  }
+}
+
+/** `consertar: false` só para os testes medirem o antes e o depois do conserto. */
+export function lerAreasProtegidas(bytes: Uint8Array, nomeArquivo: string, opcoes: { consertar?: boolean } = {}): BaseAreas {
+  const consertar = opcoes.consertar ?? true;
   const feicoes = lerKml(bytes);
   const areas: AreaProtegida[] = [];
   const municipios: AreaProtegida[] = [];
   for (const f of feicoes) {
     const poligonos: Pt[][][] = [];
     const linhas: Pt[][] = [];
+    let defeito = false;
     for (const g of f.geometrias) {
       if (g.t === 'poligono') {
         const aneis = limparPoligono(g.aneis);
-        if (aneis) poligonos.push(aneis);
+        if (!aneis) continue;
+        if (!consertar) { poligonos.push(aneis); continue; }
+        const c = consertarPoligono(aneis);
+        poligonos.push(...c.poligonos);
+        if (c.defeito) defeito = true;
       } else if (g.t === 'linha') {
         const pts = g.pts.filter(noCearaLargo);
         if (pts.length >= 2) linhas.push(pts);
@@ -101,6 +135,7 @@ export function lerAreasProtegidas(bytes: Uint8Array, nomeArquivo: string): Base
       poligonos,
       linhas,
       caixa: caixaDe(poligonos, linhas),
+      ...(defeito ? { defeito: true as const } : {}),
     });
   }
   if (municipios.length < 100) throw new Error(ERRO_NAO_E_BASE);

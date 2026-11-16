@@ -9,8 +9,12 @@ import { LARGURA_APP, RAIO_PROXIMA } from '../regras/faixas.ts';
 
 type Caixa = [number, number, number, number];
 
-// `caixa` guarda o recorte (rede + 500 m), para refazerApp refazer igual sem receber a rede; `poligonos` são todas as partes da APP
-export interface AppProposta { agua: AreaProtegida; largura: number; poligonos: Pt[][][]; porque: string; caixa: Caixa }
+// `caixa` guarda o recorte (rede + 500 m), para refazerApp refazer igual sem receber a rede; `poligonos` são todas as partes da APP;
+// `semDesenho`: o JSTS não conseguiu desenhar a margem (água com desenho quebrado no KMZ)
+export interface AppProposta { agua: AreaProtegida; largura: number; poligonos: Pt[][][]; porque: string; caixa: Caixa; semDesenho?: true }
+
+export const ERRO_APP_SEM_DESENHO =
+  'O site não conseguiu desenhar esta APP: o desenho da água no KMZ tem defeito. Confira em campo; se for APP, desenhe a margem à mão no Google Earth e avise o responsável pelo site.';
 
 const MARGEM_CAIXA = 500; // metros em volta da rede nova: não gera a margem de um rio de 300 km
 
@@ -46,12 +50,21 @@ function caixaDaRede(rede: Rede): Caixa {
   return [c[0] - MARGEM_CAIXA, c[1] - MARGEM_CAIXA, c[2] + MARGEM_CAIXA, c[3] + MARGEM_CAIXA];
 }
 
-// polígonos da APP: água em polígono = buffer menos a água; rio em linha = buffer; tudo recortado à caixa
-function geometriaApp(agua: AreaProtegida, largura: number, caixa: Caixa): Pt[][][] {
-  const g = geoDaAgua(agua);
-  const grosso = G.engrossa(g, largura);
-  const faixa = agua.poligonos.length ? G.diferenca(grosso, g) : grosso;
-  return G.poligonos(G.intersecao(faixa, G.caixa(...caixa)));
+// polígonos da APP: água em polígono = buffer menos a água; rio em linha = buffer; tudo recortado à caixa.
+// Se o JSTS lança (água com desenho quebrado), devolve null: quem chama marca a proposta como sem desenho.
+function geometriaApp(agua: AreaProtegida, largura: number, caixa: Caixa): Pt[][][] | null {
+  try {
+    const g = geoDaAgua(agua);
+    const grosso = G.engrossa(g, largura);
+    const faixa = agua.poligonos.length ? G.diferenca(grosso, g) : grosso;
+    return G.poligonos(G.intersecao(faixa, G.caixa(...caixa)));
+  } catch {
+    return null;
+  }
+}
+
+function comDesenho(p: Omit<AppProposta, 'poligonos' | 'semDesenho'>, poligonos: Pt[][][] | null): AppProposta {
+  return poligonos ? { ...p, poligonos } : { ...p, poligonos: [], semDesenho: true };
 }
 
 // Uma proposta por água, com TODAS as partes da APP (o recorte à caixa pode partir a faixa de um rio em várias).
@@ -63,22 +76,32 @@ export function proporApps(rede: Rede, base: BaseAreas): AppProposta[] {
   const out: AppProposta[] = [];
   for (const agua of base.areas) {
     const tipo = ehAgua(agua);
-    if (tipo === null) continue;
-    const g = geoDaAgua(agua);
-    if (Math.min(...alvos.map((r) => G.distancia(r, g))) > RAIO_PROXIMA) continue;
+    if (tipo === null || agua.defeito) continue; // água com defeito: o caso já dá o vermelho "não pôde ser conferida"
     const largura = LARGURA_APP[tipo];
-    out.push({ agua, largura, poligonos: geometriaApp(agua, largura, caixa), porque: PORQUE[tipo], caixa });
+    let perto: boolean;
+    try {
+      const g = geoDaAgua(agua);
+      perto = Math.min(...alvos.map((r) => G.distancia(r, g))) <= RAIO_PROXIMA;
+    } catch {
+      // nem a distância deu: pela caixa da rede + 100 m, para não sumir em silêncio
+      const d = MARGEM_CAIXA - RAIO_PROXIMA;
+      perto = agua.caixa[0] <= caixa[2] - d && agua.caixa[2] >= caixa[0] + d && agua.caixa[1] <= caixa[3] - d && agua.caixa[3] >= caixa[1] + d;
+    }
+    if (!perto) continue;
+    out.push(comDesenho({ agua, largura, porque: PORQUE[tipo], caixa }, geometriaApp(agua, largura, caixa)));
   }
   return out;
 }
 
 // refaz todas as partes com outra largura
 export function refazerApp(p: AppProposta, largura: number): AppProposta {
-  return { ...p, largura, poligonos: geometriaApp(p.agua, largura, p.caixa) };
+  const { semDesenho: _antes, poligonos: _velhos, ...resto } = p;
+  return comDesenho({ ...resto, largura }, geometriaApp(p.agua, largura, p.caixa));
 }
 
 // APP sem área não pode ser aceita: apagaria o aviso sem proteger nada
 export function confirmarApp(p: AppProposta): AreaConfirmada {
+  if (p.semDesenho) throw new Error(ERRO_APP_SEM_DESENHO);
   if (!p.poligonos.some((aneis) => G.area(G.poligono(aneis)) > 0)) {
     throw new Error('A APP ficou vazia. Aumente a largura e tente de novo.');
   }

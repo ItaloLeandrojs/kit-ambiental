@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { strToU8 } from 'fflate';
 import { montarZip } from '../src/nucleo/zip.ts';
 import { lerAreasProtegidas, orgaoDaArea, ehAgua, type AreaProtegida } from '../src/nucleo/areas.ts';
+import { G } from '../src/nucleo/geom.ts';
 
 const quadrado = (lon: number, lat: number, l = 0.05) =>
   `${lon},${lat} ${lon + l},${lat} ${lon + l},${lat + l} ${lon},${lat + l} ${lon},${lat}`;
@@ -117,6 +118,46 @@ describe('lerAreasProtegidas', () => {
     expect(a.poligonos[0][0]).toHaveLength(5);
     expect(a.caixa[2]).toBeLessThan(900_000);
     expect(a.caixa[2] - a.caixa[0]).toBeLessThan(10_000);
+  });
+
+  // quadrado de 0,05° com um laço que sai do meio do lado de cima e volta ao mesmo ponto (o anel se toca):
+  // inválido para o JSTS, que lança "non-noded intersection" quando uma linha o atravessa, como no KMZ real
+  const comLaco = (lon: number, lat: number, furo: boolean) => {
+    const p = (x: number, y: number) => `${lon + 0.0005 * x},${lat + 0.0005 * y}`;
+    const laco = furo ? [p(70, 50), p(30, 50)] : [p(30, 50), p(70, 50)];
+    const anel = [p(0, 0), p(100, 0), p(100, 100), p(50, 100), ...laco, p(50, 100), p(0, 100), p(0, 0)].join(' ');
+    return `<Polygon><outerBoundaryIs><LinearRing><coordinates>${anel}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
+  };
+  const atravessa = (a: AreaProtegida): number => {
+    const y = (a.caixa[1] + a.caixa[3]) / 2 + 0.2 * (a.caixa[3] - a.caixa[1]); // passa pelo laço
+    return G.dentro([[a.caixa[0] - 10, y], [a.caixa[2] + 10, y]], G.uniao(a.poligonos.map((an) => G.poligono(an)))).length;
+  };
+
+  it('polígono com o anel que se toca é consertado na leitura: fica válido, com o furo e a mesma área', () => {
+    const b = lerAreasProtegidas(kmz(municipios() + pasta('Unidade de Conservação Estadual', placemark('Área Laçada', comLaco(-39, -4, true)))), NOME);
+    const a = achar(b.areas, 'Área Laçada');
+    expect(a.defeito).toBeUndefined();
+    expect(a.poligonos).toHaveLength(1);
+    expect(a.poligonos[0]).toHaveLength(2); // externo e o furo que o laço desenhava
+    const quadrado = G.area(G.poligono([a.poligonos[0][0]]));
+    expect(G.area(G.poligono(a.poligonos[0]))).toBeCloseTo(quadrado * 0.9, -2); // o furo é 10% do quadrado
+    expect(() => atravessa(a)).not.toThrow();
+    expect(atravessa(a)).toBe(2); // a linha entra, sai pelo furo e entra de novo
+  });
+
+  it('o mesmo polígono sem conserto lança no JSTS (o que a leitura evita)', () => {
+    const b = lerAreasProtegidas(kmz(municipios() + pasta('Unidade de Conservação Estadual', placemark('Área Laçada', comLaco(-39, -4, true)))), NOME, { consertar: false });
+    expect(() => atravessa(achar(b.areas, 'Área Laçada'))).toThrow();
+  });
+
+  it('polígono que o conserto mudaria demais fica como veio, marcado com defeito', () => {
+    // o laço no mesmo sentido do anel conta a área duas vezes: o conserto tira 9% da área, acima do limite
+    const b = lerAreasProtegidas(kmz(municipios() + pasta('Unidade de Conservação Estadual', placemark('Área Dobrada', comLaco(-39, -4, false)))), NOME);
+    const a = achar(b.areas, 'Área Dobrada');
+    expect(a.defeito).toBe(true);
+    expect(a.poligonos[0][0]).toHaveLength(9);
+    // os polígonos bons não ganham a marca
+    expect(base.areas.every((x) => x.defeito === undefined)).toBe(true);
   });
 
   it('dá o erro exato em KML de rede, sem a pasta de municípios ou com poucos municípios', () => {

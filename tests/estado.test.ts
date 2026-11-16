@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { criarEstado, proximaMarca, ERRO_OS, ERRO_SEM_KMZ, type Armazem } from '../src/tela/estado.ts';
+import { criarEstado, proximaMarca, ERRO_BASE_ANTIGA, ERRO_OS, ERRO_SEM_KMZ, type Armazem } from '../src/tela/estado.ts';
+import { VERSAO_LEITURA } from '../src/nucleo/areas.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import type { Pt, Vao } from '../src/nucleo/tipos.ts';
 import { deUtm } from '../src/nucleo/utm.ts';
@@ -211,6 +212,19 @@ describe('estado: armazém', () => {
     await e.carregarKmz(bytesDe('x'), 'a.kmz');
     expect(e.ler().base).toBe(BASE);
     expect(e.ler().erro).toBeNull();
+  });
+
+  it('base guardada por uma versão antiga do site (sem o conserto dos polígonos) não volta: pede o KMZ de novo', async () => {
+    const m = memoria();
+    m.dados.set('base', { nome: 'Areas_Rev1.kmz', base: BASE });
+    const e = criarEstado({ lerAreas: lerBase, armazem: m });
+    await e.iniciar();
+    expect(e.ler().base).toBeNull();
+    expect(e.ler().erro).toBe(ERRO_BASE_ANTIGA);
+    expect(e.ler().erroPasso).toBe(1);
+    await e.carregarKmz(bytesDe('x'), 'Areas_Rev1.kmz');
+    expect(e.ler().erro).toBeNull();
+    expect((m.dados.get('base') as { versao: number }).versao).toBe(VERSAO_LEITURA);
   });
 
   it('o que está guardado e não parece uma base é ignorado', async () => {

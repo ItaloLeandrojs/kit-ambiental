@@ -121,14 +121,32 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
   const geosRede: Geo[] = [...novos.map((v) => G.linha(v.pts)), ...postesNovos.map((p) => G.ponto(p.ponto))];
   const distRede = (g: Geo): number => Math.min(...geosRede.map((r) => G.distancia(r, g)));
 
-  const alvos: Alvo[] = [
-    ...base.areas.filter((a) => ehAgua(a) === null && cruza(a.caixa, caixaPerto)).map(alvoDe),
-    ...confirmadas.map(alvoDe).filter((a) => cruza(a.caixa, caixaPerto)),
+  // área que não deu para cruzar (defeito na leitura ou erro do JSTS): aviso vermelho com o nome, nunca silêncio
+  const naoConferidas = new Map<AreaProtegida | AreaConfirmada, string>(); // por identidade: duas áreas podem ter o mesmo nome
+  const naoConferiu = (a: AreaProtegida | AreaConfirmada) => { naoConferidas.set(a, a.nome); };
+  const alvos: Alvo[] = [];
+  const perto = [
+    ...base.areas.filter((a) => ehAgua(a) === null && cruza(a.caixa, caixaPerto)),
+    ...confirmadas.filter((a) => cruza(caixaDePts(a.poligonos.filter(aneisValidos).map((an) => an[0]).flat()), caixaPerto)),
   ];
+  for (const a of perto) {
+    if (!ehConfirmada(a) && a.defeito) { naoConferiu(a); continue; }
+    try { alvos.push(alvoDe(a)); } catch { naoConferiu(a); }
+  }
 
   const intervencoes: Intervencao[] = [];
   const semCruzar: Alvo[] = [];
   for (const alvo of alvos) {
+    try {
+      const iv = cruzar(alvo);
+      if (iv) intervencoes.push(iv);
+      else if (!ehConfirmada(alvo.area)) semCruzar.push(alvo);
+    } catch {
+      naoConferiu(alvo.area);
+    }
+  }
+
+  function cruzar(alvo: Alvo): Intervencao | null {
     const pedacos: Pedaco[] = [];
     if (alvo.geo && cruza(alvo.caixa, caixaRede)) {
       for (const v of novos) {
@@ -147,20 +165,17 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
       : postesNovos
           .filter((p) => alvo.geo !== null && G.contem(alvo.geo, G.ponto(p.ponto)))
           .map((p) => ({ poste: p, m2: m2PorPoste[p.id] ?? M2_POSTE_SEM_REDE }));
-    if (trechos.length === 0 && postesSemRede.length === 0) {
-      if (!ehConfirmada(alvo.area)) semCruzar.push(alvo);
-      continue;
-    }
+    if (trechos.length === 0 && postesSemRede.length === 0) return null;
     const metros: Record<TipoRede, number> = { MT: 0, BT: 0, CONJ: 0 };
     for (const t of trechos) metros[t.tipo] += t.metros;
     const m2 =
       (Object.keys(metros) as TipoRede[]).reduce((s, t) => s + Math.round(metros[t]) * FAIXA[t], 0) +
       postesSemRede.reduce((s, x) => s + x.m2, 0);
-    intervencoes.push({
+    return {
       area: alvo.area,
       orgao: ehConfirmada(alvo.area) ? ORGAO_APP : orgaoDaArea(alvo.area),
       trechos, metros, postesSemRede, hectares: m2 / 10000,
-    });
+    };
   }
 
   const avisos: Aviso[] = [];
@@ -190,6 +205,13 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
 
   const proximas: Caso['proximas'] = [];
   for (const alvo of semCruzar) {
+    try {
+      perto100(alvo);
+    } catch {
+      naoConferiu(alvo.area);
+    }
+  }
+  function perto100(alvo: Alvo) {
     const a = alvo.area as AreaProtegida; // confirmada nunca entra em semCruzar
     const dLinhas = a.linhas.map((l) => distRede(G.linha(l)));
     if (alvo.geo === null && Math.min(Infinity, ...dLinhas) <= TOL_JUNTA) {
@@ -198,7 +220,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
         nivel: 'amarelo', codigo: 'CRUZA_LINHA', texto: `${a.nome}: ${TEXTOS.cruzaLinha}`,
         comoCorrigir: `Pergunte ao P&M como tratar "${a.nome}", que no KMZ é só uma linha e a rede nova cruza; o site não calcula metros nem hectares para linha.`,
       });
-      continue;
+      return;
     }
     const d = Math.min(Infinity, ...(alvo.geo ? [distRede(alvo.geo)] : []), ...dLinhas);
     if (d <= RAIO_PROXIMA) {
@@ -213,8 +235,16 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
   // possível APP: água da COGERH a até 100 m da rede nova, sem APP confirmada encostada nela
   for (const a of base.areas) {
     if (ehAgua(a) === null || !cruza(a.caixa, caixaPerto)) continue;
-    const geos = [...a.poligonos.filter(aneisValidos).map((p) => G.poligono(p)), ...a.linhas.map((l) => G.linha(l))];
-    if (!geos.length || Math.min(...geos.map(distRede)) > RAIO_PROXIMA) continue;
+    if (a.defeito) { naoConferiu(a); continue; }
+    let longe: boolean;
+    try {
+      const geos = [...a.poligonos.filter(aneisValidos).map((p) => G.poligono(p)), ...a.linhas.map((l) => G.linha(l))];
+      longe = !geos.length || Math.min(...geos.map(distRede)) > RAIO_PROXIMA;
+    } catch {
+      naoConferiu(a);
+      continue;
+    }
+    if (longe) continue;
     if (confirmadas.some((c) => c.aguaId === a.id)) continue; // só a APP confirmada para ESTA água tira o aviso
     avisos.push({
       nivel: 'amarelo', codigo: 'APP_POSSIVEL', texto: `Rede nova a menos de 100 m de ${a.nome}. ${TEXTOS.appCampo}`,
@@ -268,6 +298,13 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
     avisos.push({
       nivel: 'amarelo', codigo: 'LITORAL', texto: TEXTOS.litoral,
       comoCorrigir: `Confira no Google Earth se há duna, restinga ou beira-mar a menos de 100 m da rede nova em ${litoralPerto.map((m) => m.nome).join(', ')}.`,
+    });
+  }
+
+  for (const nome of naoConferidas.values()) {
+    avisos.push({
+      nivel: 'vermelho', codigo: 'AREA_NAO_CONFERIDA', texto: `${nome}: ${TEXTOS.areaNaoConferida}`,
+      comoCorrigir: `Abra o KMZ e a rede no Google Earth e veja se a rede nova cruza "${nome}" ou passa a menos de 100 m dela; se cruzar, meça os metros à mão e avise o responsável pelo site.`,
     });
   }
 

@@ -12,6 +12,7 @@ import LineMerger from 'jsts/org/locationtech/jts/operation/linemerge/LineMerger
 import OverlayOp from 'jsts/org/locationtech/jts/operation/overlay/OverlayOp.js';
 import RelateOp from 'jsts/org/locationtech/jts/operation/relate/RelateOp.js';
 import UnaryUnionOp from 'jsts/org/locationtech/jts/operation/union/UnaryUnionOp.js';
+import IsValidOp from 'jsts/org/locationtech/jts/operation/valid/IsValidOp.js';
 import TopologyPreservingSimplifier from 'jsts/org/locationtech/jts/simplify/TopologyPreservingSimplifier.js';
 import type { Pt } from './tipos.ts';
 
@@ -160,6 +161,8 @@ export const G = {
     return [e.getMinX(), e.getMinY(), e.getMaxX(), e.getMaxY()];
   },
   area: (g: Geo): number => j(g).getArea(),
+  // geometria válida para o JSTS (anel que se toca ou se cruza é inválido e quebra o overlay)
+  valido: (g: Geo): boolean => new IsValidOp(g).isValid(),
   comprimento: (g: Geo): number => j(g).getLength(),
   distancia: (a: Geo, b: Geo): number => DistanceOp.distance(a, b),
   maisPerto: (g: Geo, p: Pt): Pt => {
