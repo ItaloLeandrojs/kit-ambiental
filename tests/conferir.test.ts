@@ -141,6 +141,24 @@ describe('conferirZip: cópias estragadas, uma por teste', () => {
     expect(codigos(conferirZip(montarZip(base)), 'verde')).toContain('SEPARADOS');
   });
 
+  it('kit com a camada da rede: sem o amarelo REDE', () => {
+    expect(conferirZip(montarZip(base)).map((i) => i.codigo)).not.toContain('REDE');
+  });
+
+  it('obra só de poste (sem camada da rede, no KML e no SHP): amarelo REDE, sem vermelho', () => {
+    const r = conferirZip(kit([postes, appPoligono(NOME_APP)]));
+    expect(vermelhos(r)).toEqual([]);
+    expect(codigos(r, 'amarelo')).toEqual(['REDE']);
+    const it = r.find((i) => i.codigo === 'REDE');
+    expect(it?.titulo).toBe('Sem camada da rede: confirme que a obra é só de poste');
+    expect(`${it?.titulo}${it?.porque}${it?.comoCorrigir}`).not.toMatch(/[—–]/);
+  });
+
+  it('só o unificado: sai só o vermelho SEPARADOS, sem o amarelo REDE', () => {
+    const r = conferirZip(montarZip(base.filter((a) => /UNIFICADO/.test(a.caminho) || !/\.(kml|shp|shx|dbf|prj|cpg)$/.test(a.caminho))));
+    expect(r.map((i) => i.codigo)).not.toContain('REDE');
+  });
+
   it('sem o unificado: UNIFICADO nos dois formatos', () => {
     const r = conferirZip(montarZip(base.filter((a) => !/UNIFICADO/.test(a.caminho))));
     expect(vermelhos(r).filter((c) => c === 'UNIFICADO')).toHaveLength(2);

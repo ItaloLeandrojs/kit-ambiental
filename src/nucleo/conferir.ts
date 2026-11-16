@@ -320,6 +320,12 @@ export function conferirZip(bytes: Uint8Array, dxf?: Uint8Array): ItemConferenci
       'Junte ao zip as camadas separadas (KML e shapefile de cada uma), como o site grava no passo 6.'));
   } else {
     itens.push(verde('SEPARADOS', 'Camadas separadas', `Além do unificado, o zip tem ${separadas.size} ${separadas.size === 1 ? 'camada' : 'camadas'}.`));
+    // sem camada da rede, em KML ou shapefile: pode ser obra só de poste (kit aprovado assim), então não trava
+    if (![...separadas].some(ehRede)) {
+      itens.push(item('amarelo', 'REDE', 'Sem camada da rede: confirme que a obra é só de poste',
+        'O zip não tem nenhuma camada com REDE no nome. Isso está certo na obra só de poste; na obra com rede nova, o órgão não tem os metros da rede para conferir.',
+        'Se a obra tem rede nova, junte ao zip a camada da rede (KML e shapefile, com REDE no nome); se é só de poste, nada a corrigir.'));
+    }
   }
 
   // ---- PRJ ----
