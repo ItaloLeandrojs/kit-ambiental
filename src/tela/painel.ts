@@ -40,6 +40,8 @@ const PASSOS = [
   { n: 7, titulo: 'Conferir um zip' },
 ] as const;
 const AVISOS_DA_REDE = new Set(['POSTE_A_CONFIRMAR', 'SEM_REDE_NOVA']); // aparecem no passo 3, não no 5
+// avisos das árvores que vão ao memorial: aparecem também no passo 5 e no resumo
+const AVISOS_ARVORE_NO_CASO = new Set(['ARVORE_CARNAUBA', 'ARVORE_SEM_ESPECIE']);
 const ERRO_M2_TELA = 'Os m² do poste precisam ser um número, zero ou maior.';
 const PRAZO_POSTE = 5; // m: poste que dá nome à ponta do vão
 
@@ -553,9 +555,10 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const nomesComCartao = r.apps.map((a) => a.proposta.agua.nome);
     const cobertoPorCartao = (a: Aviso): boolean =>
       a.codigo === 'APP_POSSIVEL' && nomesComCartao.some((n) => a.texto.startsWith(`Rede nova a menos de 100 m de ${n}.`));
-    const outros = [...caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !cobertoPorCartao(a)), ...r.avisosEmArea, ...r.avisosFaixa];
+    const daArvore = r.avisosArvores.filter((a) => AVISOS_ARVORE_NO_CASO.has(a.codigo));
+    const outros = [...caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !cobertoPorCartao(a)), ...daArvore, ...r.avisosEmArea, ...r.avisosFaixa];
     const linhaDasArvores = linhaArvores(r.arvores, r.limpeza);
-    const texto = resumoTexto(caso, r.projeto?.os ?? '', [...(linhaDasArvores ? [linhaDasArvores] : []), ...r.avisosEmArea.map((a) => `Aviso: ${a.texto}`), ...r.avisosFaixa.map((a) => `Aviso: ${a.texto}`)]);
+    const texto = resumoTexto(caso, r.projeto?.os ?? '', [...(linhaDasArvores ? [linhaDasArvores] : []), ...[...daArvore, ...r.avisosEmArea, ...r.avisosFaixa].map((a) => `Aviso: ${a.texto}`)]);
     const paraConferir = outros.length + r.appsPendentes;
     return [
       h('div', { class: 'resumo-topo' },

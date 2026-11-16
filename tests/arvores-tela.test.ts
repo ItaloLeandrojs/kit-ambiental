@@ -231,6 +231,20 @@ describe('painel: passo 4, árvores', () => {
     expect(p5).toContain('Árvores: 1 supressão.');
   });
 
+  it('carnaúba e árvore sem espécie chegam ao passo 5 e ao resumo copiado', async () => {
+    await comCaso(true);
+    botao('Rede confirmada, seguir').click();
+    const [a] = estado.adicionarFotos([foto('a.jpg', jpegNoUtm([500300, 9500300])), foto('b.jpg', jpegNoUtm([500310, 9500310]))]);
+    estado.mudarArvore(a, { especie: 'Carnaúba', intervencao: 'supressao' });
+    botao('Seguir para o caso').click();
+    const cods = [...passo(5).querySelectorAll('.cod')].map((c) => c.textContent);
+    expect(cods).toContain('ARVORE_CARNAUBA');
+    expect(cods).toContain('ARVORE_SEM_ESPECIE');
+    const resumo = passo(5).querySelector('.resumo-txt')!.textContent!;
+    expect(resumo).toContain('Aviso: Carnaúba é espécie protegida (Decreto estadual 27.413/2004).');
+    expect(resumo).toContain('Aviso: Há 1 árvore sem espécie.');
+  });
+
   it('"Rede confirmada, seguir" abre o passo 4, que mostra a zona de fotos; o passo 5 espera', async () => {
     await comCaso(true);
     expect(passo(4).classList.contains('bloqueado')).toBe(false);
