@@ -117,6 +117,18 @@ describe('conferirZip: cópias estragadas, uma por teste', () => {
     expect(it?.titulo).toContain('APP DO AÇUDE desenhada como linha');
   });
 
+  it('KML ou SHP da camada vazio: NO_LUGAR vermelho, nunca o verde de "no lugar"', () => {
+    const vazia: CamadaKit = { ...postes, feicoes: [] };
+    const kmlVazio = conferirZip(montarZip(trocar(base, `${OS} KML/${OS} POSTES.kml`, enc.encode(gravarKml(vazia)))));
+    const it1 = kmlVazio.find((i) => i.codigo === 'NO_LUGAR' && i.nivel === 'vermelho');
+    expect(it1?.titulo).toContain('POSTES');
+    expect(codigos(kmlVazio, 'verde')).not.toContain('NO_LUGAR');
+    const g = gravarShp(vazia);
+    const shpVazio = conferirZip(montarZip(trocar(trocar(base, `${OS} SHAPEFILE/${OS} POSTES.shp`, g.shp), `${OS} SHAPEFILE/${OS} POSTES.shx`, g.shx)));
+    expect(vermelhos(shpVazio)).toContain('NO_LUGAR');
+    expect(codigos(shpVazio, 'verde')).not.toContain('NO_LUGAR');
+  });
+
   it('sem o unificado: UNIFICADO nos dois formatos', () => {
     const r = conferirZip(montarZip(base.filter((a) => !/UNIFICADO/.test(a.caminho))));
     expect(vermelhos(r).filter((c) => c === 'UNIFICADO')).toHaveLength(2);

@@ -330,7 +330,22 @@ export function conferirZip(bytes: Uint8Array, dxf?: Uint8Array): ItemConferenci
   let foraDoLugar = 0;
   let conferidos = 0;
   for (const { k, s } of pares) {
-    if (!s.geo || s.geo.length === 0 || k.geo.length === 0) continue;
+    if (!s.geo) continue; // shapefile ilegível ou sem .shp: já saiu vermelho acima
+    if (s.geo.length === 0 || k.geo.length === 0) {
+      // camada vazia num lado: não dá para conferir o lugar, e o "no lugar" verde não pode sair
+      foraDoLugar++;
+      const arqs = [k.caminho, ...s.caminhos];
+      if (s.geo.length === 0 && k.geo.length === 0) {
+        itens.push(item('amarelo', 'NO_LUGAR', `Camada vazia nos dois formatos: ${s.base}`,
+          'O KML e o shapefile desta camada não têm nenhum desenho. O órgão não tem o que olhar nela.',
+          'Se a camada é do kit, grave de novo com o desenho; se é sobra, apague o KML e o shapefile do zip.', arqs));
+      } else {
+        const vazio = k.geo.length === 0 ? 'no KML' : 'no shapefile';
+        itens.push(item('vermelho', 'NO_LUGAR', `Camada vazia ${vazio}: ${s.base}`, TEXTOS.shpDeslocado,
+          `A camada tem desenho num formato e está vazia ${vazio}. Grave o KML e o shapefile de novo a partir do mesmo desenho.`, arqs));
+      }
+      continue;
+    }
     conferidos++;
     const d = piorDistancia(s.geo, k.geo);
     piorGeral = Math.max(piorGeral, d);
