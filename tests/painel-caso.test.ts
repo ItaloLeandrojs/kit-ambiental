@@ -4,6 +4,7 @@ import { criarEstado, type Estado } from '../src/tela/estado.ts';
 import { criarPainel } from '../src/tela/painel.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import type { Pt } from '../src/nucleo/tipos.ts';
+import type { Malha, TipoMalha } from '../src/nucleo/faixa.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { PORQUE_AVISO } from '../src/regras/textos.ts';
 import { abrirZip } from '../src/nucleo/zip.ts';
@@ -39,10 +40,16 @@ const clicarPasso = (n: number) => passo(n).querySelector('summary')!.dispatchEv
 const botao = (rotulo: string): HTMLButtonElement =>
   [...raiz.querySelectorAll('button')].find((b) => b.textContent === rotulo) as HTMLButtonElement;
 
-async function noCaso() {
-  estado = criarEstado({ lerAreas: async () => BASE });
+// malha inventada: a SOP com uma estrada longe da obra, ou sem linha nenhuma
+const malhaLonge: Malha = { tipo: 'SOP', nome: 'SOP.kml', linhas: [{ nome: 'CE-000', pts: [[500000, 9510000], [500200, 9510000]] }] };
+const malhaPerto: Malha = { tipo: 'SOP', nome: 'SOP.kml', linhas: [{ nome: 'CE-999', pts: [[499900, 9500070], [500300, 9500070]] }] };
+
+// com malha longe da obra por padrão, para os avisos da faixa não entrarem nas outras contas
+async function noCaso(malha: Malha | null = malhaLonge) {
+  estado = criarEstado({ lerAreas: async () => BASE, lerMalha: async () => malha! });
   criarPainel(raiz, estado, { salvar });
   await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
+  if (malha) await estado.carregarMalha(new Uint8Array([1]), 'SOP.kml', malha.tipo as TipoMalha);
   await estado.carregarProjeto(DXF, 'obra.dxf', '0000000001');
   botao('Rede confirmada, seguir').click();
   botao('Seguir para o caso').click();
@@ -244,3 +251,31 @@ describe('painel: avisos e documentos', () => {
     expect(passo(7).querySelector('.item.vermelho')).not.toBeNull();
   });
 });
+
+describe('painel: faixa de domínio', () => {
+  it('sem malha carregada, o passo 5 mostra o amarelo pedindo as malhas e o resumo repete', async () => {
+    await noCaso(null);
+    expect(estado.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA']);
+    const codigos = [...passo(5).querySelectorAll('.cod')].map((c) => c.textContent);
+    expect(codigos).toContain('FAIXA_SEM_MALHA');
+    expect(passo(5).textContent).toContain('Carregue as malhas DNIT e SOP para conferir a faixa de domínio');
+    expect(passo(5).querySelector('.resumo-txt')!.textContent).toContain('Aviso: Carregue as malhas DNIT e SOP');
+  });
+
+  it('malha a 20 m da rede: aviso da rodovia com metros e faixa, no cartão e no resumo', async () => {
+    await noCaso(malhaPerto);
+    const aviso = estado.ler().avisosFaixa;
+    expect(aviso).toHaveLength(1);
+    expect(aviso[0].texto).toBe('precisa de processo DNIT/SOP: CE-999, 100 m de rede dentro da faixa de 35 m');
+    expect(passo(5).textContent).toContain('CE-999, 100 m de rede dentro da faixa de 35 m');
+    expect(passo(5).querySelector('.resumo-txt')!.textContent).toContain('Aviso: precisa de processo DNIT/SOP: CE-999');
+  });
+
+  it('o passo 1 mostra as três zonas de malha e, depois de lida, o arquivo com o número de linhas', async () => {
+    await noCaso(malhaPerto);
+    clicarPasso(1);
+    expect(passo(1).querySelectorAll('input[aria-label^="Escolher a malha"]')).toHaveLength(2); // DNIT e Ferrovia
+    expect(passo(1).textContent).toContain('SOP (rodovias estaduais) · 1 linhas');
+  });
+});
+

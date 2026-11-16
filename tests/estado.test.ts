@@ -354,3 +354,40 @@ describe('estado: conferir o zip baixado', () => {
     expect(e.conferir(bytesDe('isto não é zip'))[0].nivel).toBe('vermelho');
   });
 });
+
+describe('estado: malhas de faixa de domínio', () => {
+  const malha = (tipo: 'DNIT' | 'SOP' | 'FERROVIA'): import('../src/nucleo/faixa.ts').Malha => ({ tipo, nome: `${tipo}.kml`, linhas: [{ nome: 'CE-999', pts: [[499900, 9500070], [500300, 9500070]] }] });
+
+  it('sem malha, o caso traz só o amarelo de carregar; com malha perto, o aviso da rodovia', async () => {
+    const e = criarEstado({ lerAreas: lerBase, lerMalha: async (_b, _n, t) => malha(t) });
+    await e.carregarKmz(bytesDe('x'), 'a.kmz');
+    expect(e.ler().avisosFaixa).toEqual([]); // sem projeto, nada a conferir
+    await e.carregarProjeto(DXF_OBRA, 'obra.dxf', '0000000001');
+    expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA']);
+    await e.carregarMalha(bytesDe('x'), 'SOP.kml', 'SOP');
+    expect(e.ler().malhas.map((m) => m.tipo)).toEqual(['SOP']);
+    expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_DOMINIO']);
+    expect(e.ler().avisosFaixa[0].texto).toContain('CE-999');
+  });
+
+  it('a malha fica no armazém e volta na próxima visita; trocar do mesmo tipo substitui', async () => {
+    const dados = new Map<string, unknown>();
+    const armazem: Armazem = { guardar: async (k, v) => { dados.set(k, v); }, ler: async (k) => dados.get(k) };
+    const e = criarEstado({ lerAreas: lerBase, lerMalha: async (_b, _n, t) => malha(t), armazem });
+    await e.carregarMalha(bytesDe('x'), 'SOP.kml', 'SOP');
+    await e.carregarMalha(bytesDe('x'), 'SOP2.kml', 'SOP');
+    expect(e.ler().malhas).toHaveLength(1);
+    expect(dados.has('malha-SOP')).toBe(true);
+    const outro = criarEstado({ lerAreas: lerBase, armazem });
+    await outro.iniciar();
+    expect(outro.ler().malhas.map((m) => m.tipo)).toEqual(['SOP']);
+  });
+
+  it('malha com erro vira erroMalha e não derruba o resto', async () => {
+    const e = criarEstado({ lerAreas: lerBase, lerMalha: async () => { throw new Error('arquivo ruim'); } });
+    await e.carregarMalha(bytesDe('x'), 'SOP.kml', 'SOP');
+    expect(e.ler().erroMalha).toBe('arquivo ruim');
+    expect(e.ler().malhas).toEqual([]);
+    expect(e.ler().ocupado).toBe(false);
+  });
+});

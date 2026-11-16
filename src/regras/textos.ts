@@ -13,6 +13,8 @@ export const TEXTOS = {
   // provisório: texto a confirmar com o Italo
   posteAConfirmar: 'ponto sem nome no KML tratado como poste novo; confirme no mapa',
   faixaDominio: 'precisa de processo DNIT/SOP',
+  // provisório: texto a confirmar com o Italo
+  faixaSemMalha: 'Carregue as malhas DNIT e SOP para conferir a faixa de domínio',
 } as const;
 
 // "Por que importa" de cada aviso do caso, para o cartão da tela (texto provisório: a confirmar com o Italo)
@@ -33,5 +35,7 @@ export const PORQUE_AVISO: Record<string, string> = {
   ARVORE_EM_AREA: 'Poda, supressão ou limpeza dentro de área protegida pode exigir autorização do órgão da área.',
   ARVORE_SEM_ESPECIE: 'O órgão avalia a autorização pela espécie; sem ela o pedido pode ser devolvido.',
   ARVORE_SEM_PONTO: 'Sem posição, a árvore não entra no kit: o órgão não saberia onde ela está.',
+  FAIXA_DOMINIO: 'Rede dentro da faixa de domínio de rodovia ou ferrovia exige autorização do órgão dono da via.',
+  FAIXA_SEM_MALHA: 'Sem as malhas das rodovias, o site não sabe se a rede nova entra em faixa de domínio.',
   SEM_AREA: 'O KMZ não cobre todos os rios, lagoas e açudes: não ter área no KMZ não prova que não há APP.',
 };

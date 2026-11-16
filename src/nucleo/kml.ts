@@ -5,7 +5,7 @@ import { percorrerXml } from './xml.ts';
 
 const ERRO_KML = 'Este arquivo não é um KML nem um KMZ';
 
-function textoDoKml(bytes: Uint8Array): string {
+export function textoDoKml(bytes: Uint8Array): string {
   if (bytes.length > 1 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
     let arquivos;
     try {
@@ -21,7 +21,7 @@ function textoDoKml(bytes: Uint8Array): string {
   return new TextDecoder('utf-8').decode(bytes).replace(/^﻿/, '');
 }
 
-function lerCoordenadas(t: string): Pt[] {
+export function lerCoordenadas(t: string): Pt[] {
   const pts: Pt[] = [];
   for (const trio of t.split(/\s+/)) {
     if (!trio) continue;

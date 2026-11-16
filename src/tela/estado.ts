@@ -6,6 +6,7 @@ import { avisosArvores, avisosEmArea, camadasArvores, posicaoDaFoto, type Arvore
 import { montarCamadas, unificar } from '../nucleo/camadas.ts';
 import { calcularCaso, type AreaConfirmada, type Caso } from '../nucleo/caso.ts';
 import { conferirZip, type ItemConferencia } from '../nucleo/conferir.ts';
+import { avisosFaixa, lerMalha, type Malha, type TipoMalha } from '../nucleo/faixa.ts';
 import { gravarKml } from '../nucleo/kml-saida.ts';
 import { montarPacote } from '../nucleo/pacote.ts';
 import { lerDxfGeometria, type DxfGeo } from '../nucleo/dxf.ts';
@@ -49,6 +50,9 @@ export interface Retrato {
   avisosEmArea: Aviso[]; // árvore ou limpeza dentro de área protegida ou APP confirmada (passo 5)
   arvoresSemPonto: number;
   erroArvores: string | null;
+  malhas: Malha[]; // malhas de faixa de domínio carregadas (DNIT, SOP, ferrovia)
+  avisosFaixa: Aviso[]; // faixa de domínio e malhas que faltam (passo 5); vazio sem caso
+  erroMalha: string | null;
 }
 
 export interface Armazem {
@@ -58,6 +62,7 @@ export interface Armazem {
 
 export interface Dependencias {
   lerAreas?: (bytes: Uint8Array, nome: string) => Promise<BaseAreas>;
+  lerMalha?: (bytes: Uint8Array, nome: string, tipo: TipoMalha) => Promise<Malha>;
   armazem?: Armazem;
 }
 
@@ -65,6 +70,8 @@ export interface Estado {
   iniciar(): Promise<void>;
   carregarKmz(bytes: Uint8Array, nome: string): Promise<void>;
   carregarProjeto(bytes: Uint8Array, nome: string, os: string): Promise<void>;
+  /** Malha de rodovia ou ferrovia (passo 1). Guardada no navegador, só com as linhas em UTM. */
+  carregarMalha(bytes: Uint8Array, nome: string, tipo: TipoMalha): Promise<void>;
   /** Sem `mudanca`, passa para a próxima marca do ciclo (MT novo, BT novo, conjugada nova, fora). */
   marcarVao(id: string, mudanca?: { tipo?: TipoRede | null; situacao?: Situacao }): void;
   incluirCamada(camada: string, tipo: TipoRede): void;
@@ -106,6 +113,8 @@ export const ERRO_SEM_CASO = 'Falta o caso: abra o KMZ e o projeto, e resolva os
 export const ERRO_LARGURA = 'A largura da APP precisa ser um número maior que zero, em metros.';
 export const ERRO_SEM_KMZ = 'Abra primeiro o KMZ de Áreas Protegidas (passo 1).';
 const CHAVE_BASE = 'base';
+const chaveMalha = (tipo: TipoMalha): string => `malha-${tipo}`;
+const TIPOS_MALHA: TipoMalha[] = ['DNIT', 'SOP', 'FERROVIA'];
 
 export const osValida = (os: string): boolean => /^\d{10}$/.test(os.trim());
 
@@ -124,6 +133,7 @@ const mensagem = (e: unknown): string => (e instanceof Error ? e.message : Strin
 
 export function criarEstado(deps: Dependencias = {}): Estado {
   const lerAreas = deps.lerAreas ?? (async (b: Uint8Array, n: string) => lerAreasProtegidas(b, n));
+  const lerDaMalha = deps.lerMalha ?? (async (b: Uint8Array, n: string, t: TipoMalha) => lerMalha(b, n, t));
   const armazem = deps.armazem;
   const ouvintes = new Set<() => void>();
 
@@ -147,6 +157,9 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   let limpeza: Pt[][] = [];
   let modoMapa: ModoMapa = null;
   let erroArvores: string | null = null;
+  let malhas: Malha[] = [];
+  let faixa: Aviso[] = [];
+  let erroMalha: string | null = null;
   let contaArvores = 0;
   // respostas dadas, por id da água: sobrevivem a marcar um vão (que propõe as APPs de novo)
   let respostas = new Map<number, { resposta: RespostaApp; largura: number }>();
@@ -160,7 +173,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     base, rede, bloqueio, caso, ocupado, erro, erroPasso, trabalho, kmzNome, projeto, liberado,
     camadas: dxf ? camadasCandidatas(dxf) : [],
     apps, appsPendentes: apps.filter((a) => a.resposta === 'pendente').length, m2Postes,
-    arvores, infoFotos, limpeza, modoMapa, erroArvores,
+    arvores, infoFotos, limpeza, modoMapa, erroArvores, malhas, avisosFaixa: faixa, erroMalha,
     avisosArvores: avisosArvores(arvores), avisosEmArea: emArea(), arvoresSemPonto: arvores.filter((a) => a.ponto === null).length,
   });
   // outro KMZ ou outro projeto: as árvores eram de outra obra
@@ -172,6 +185,8 @@ export function criarEstado(deps: Dependencias = {}): Estado {
 
   const confirmadas = (): AreaConfirmada[] =>
     apps.filter((a) => a.resposta === 'confirmada').map((a) => confirmarAppNoNucleo(a.proposta));
+  // faixa de domínio só existe com caso pronto: a conta com JSTS é pesada, por isso fica guardada
+  const calcularFaixa = () => { faixa = rede && base && !bloqueio ? avisosFaixa(rede, malhas) : []; };
   const calcular = () => {
     caso = rede && base && !bloqueio ? calcularCaso(rede, base, confirmadas(), m2Postes) : null;
   };
@@ -199,6 +214,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     bloqueio = null;
     caso = null;
     apps = [];
+    faixa = [];
     if (!rede || !base) return;
     const local = conferirLocal(rede, base.municipios);
     const etiqueta = conferirEtiquetas(rede).aviso;
@@ -208,6 +224,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     if (b?.codigo === 'ETIQUETA_LONGE' && liberado) b = null; // só a etiqueta se libera; FORA_UTM e FORA_CEARA não
     bloqueio = b;
     if (!b) { propor(); calcular(); }
+    calcularFaixa();
   }
 
   function prontoParaBaixar() {
@@ -235,6 +252,15 @@ export function criarEstado(deps: Dependencias = {}): Estado {
       } catch {
         // sem armazém: segue e pede o KMZ de novo
       }
+      for (const tipo of TIPOS_MALHA) {
+        try {
+          const g = (await armazem.ler(chaveMalha(tipo))) as Malha | undefined;
+          if (g && g.tipo === tipo && Array.isArray(g.linhas)) { malhas = [...malhas.filter((m) => m.tipo !== tipo), g]; }
+        } catch {
+          // sem armazém: a malha é pedida de novo
+        }
+      }
+      if (malhas.length) { calcularFaixa(); avisar(); }
     },
 
     async carregarKmz(bytes, nome) {
@@ -254,6 +280,27 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         }
       } catch (e) {
         erro = mensagem(e); erroPasso = 1;
+      } finally {
+        ocupado = false; trabalho = null;
+        avisar();
+      }
+    },
+
+    async carregarMalha(bytes, nome, tipo) {
+      erroMalha = null;
+      ocupado = true;
+      trabalho = `Lendo a malha ${tipo}…`;
+      avisar();
+      await respirar();
+      try {
+        const lida = await lerDaMalha(bytes, nome, tipo);
+        malhas = [...malhas.filter((m) => m.tipo !== tipo), lida];
+        calcularFaixa();
+        if (armazem) {
+          try { await armazem.guardar(chaveMalha(tipo), lida); } catch { /* segue sem guardar */ }
+        }
+      } catch (e) {
+        erroMalha = mensagem(e);
       } finally {
         ocupado = false; trabalho = null;
         avisar();

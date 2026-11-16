@@ -5,6 +5,7 @@ import { linhaArvores, type Arvore } from '../nucleo/arvores.ts';
 import type { Caso, Intervencao } from '../nucleo/caso.ts';
 import { ehAgua } from '../nucleo/areas.ts';
 import type { ItemConferencia } from '../nucleo/conferir.ts';
+import type { TipoMalha } from '../nucleo/faixa.ts';
 import { coordTexto, haTexto, metrosTexto } from '../nucleo/formato.ts';
 import { resumoTexto } from '../nucleo/resumo.ts';
 import { LARGURA_APP, M2_POSTE_SEM_REDE } from '../regras/faixas.ts';
@@ -137,6 +138,8 @@ const TITULO_AVISO: Record<string, string> = {
   ARVORE_SEM_ESPECIE: 'Árvore sem espécie',
   ARVORE_SEM_PONTO: 'Árvore sem posição',
   ARVORE_EM_AREA: 'Árvore em área protegida',
+  FAIXA_DOMINIO: 'Faixa de domínio',
+  FAIXA_SEM_MALHA: 'Malhas de faixa de domínio',
 };
 
 function linhasDoAviso(a: Aviso, porque?: string): Filho[] {
@@ -272,7 +275,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       if (r.arvores.length === 0 && lim === 0) return 'nenhuma árvore';
       return [`${r.arvores.length} ${r.arvores.length === 1 ? 'árvore' : 'árvores'}`, `${podas} poda${podas === 1 ? '' : 's'}`, `${sup} ${sup === 1 ? 'supressão' : 'supressões'}`, lim ? `${lim} limpeza${lim === 1 ? '' : 's'} de faixa` : ''].filter(Boolean).join(' · ');
     }
-    if (n === 5 && r.caso) return `${r.caso.intervencoes.length} áreas cruzadas · ${r.caso.avisos.length} avisos`;
+    if (n === 5 && r.caso) return `${r.caso.intervencoes.length} áreas cruzadas · ${r.caso.avisos.length + r.avisosFaixa.length} avisos`;
     if (n === 6 && r.caso) return r.appsPendentes > 0 ? 'responda as APPs antes' : 'KML e SHP prontos';
     if (n === 7 && conferencia) {
       const v = conferencia.itens.filter((i) => i.nivel === 'vermelho').length;
@@ -280,6 +283,25 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       return `${v} vermelhos · ${a} amarelos`;
     }
     return null;
+  }
+
+  // malhas de rodovia e ferrovia: opcionais, mas sem elas o site só avisa que não conferiu a faixa de domínio
+  function malhasDoPasso1(r: Retrato): Filho[] {
+    const rotulos: [TipoMalha, string][] = [['DNIT', 'DNIT (rodovias federais)'], ['SOP', 'SOP (rodovias estaduais)'], ['FERROVIA', 'Ferrovia']];
+    return [
+      h('p', { class: 'ajuda' }, h('strong', {}, 'Malhas de faixa de domínio (opcional)')),
+      r.erroMalha ? h('p', { class: 'erro', role: 'alert' }, r.erroMalha) : null,
+      ...rotulos.map(([tipo, rotulo]) => {
+        const lerMalhaArquivo = (f: File) => void lerBytes(f).then((b) => estado.carregarMalha(b, f.name, tipo));
+        const m = r.malhas.find((x) => x.tipo === tipo);
+        return m
+          ? h('div', { class: 'arquivo' },
+            h('div', {}, h('div', { class: 'nome' }, m.nome), h('div', { class: 'det' }, `${rotulo} · ${milhar(m.linhas.length)} linhas · lido e guardado neste computador`)),
+            botaoTrocar('.kml,.kmz', lerMalhaArquivo, `Escolher outra malha ${rotulo}`))
+          : zona(`Arraste aqui a malha ${rotulo}, ou clique para escolher.`, '.kml,.kmz', lerMalhaArquivo, `Escolher a malha ${rotulo}`);
+      }),
+      h('p', { class: 'ajuda' }, 'Com elas o site avisa quando a rede nova entra na faixa de domínio de uma rodovia ou ferrovia. Só na primeira vez; ficam guardadas aqui.'),
+    ];
   }
 
   function passo1(r: Retrato): Filho[] {
@@ -298,6 +320,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
           botaoTrocar('.kmz,.kml', lerKmz, 'Escolher outro KMZ de Áreas Protegidas'))
         : zona('Arraste aqui o KMZ de Áreas Protegidas, ou clique para escolher.', '.kmz,.kml', lerKmz, 'Escolher o KMZ de Áreas Protegidas'),
       avisoRevisao,
+      ...malhasDoPasso1(r),
       h('p', { class: 'ajuda' }, 'É o mapa de todas as áreas protegidas do Ceará. ', h('strong', {}, 'Só precisa na primeira vez.'), ' Nada sai do seu computador.'),
     ];
   }
@@ -527,9 +550,9 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const nomesComCartao = r.apps.map((a) => a.proposta.agua.nome);
     const cobertoPorCartao = (a: Aviso): boolean =>
       a.codigo === 'APP_POSSIVEL' && nomesComCartao.some((n) => a.texto.startsWith(`Rede nova a menos de 100 m de ${n}.`));
-    const outros = [...caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !cobertoPorCartao(a)), ...r.avisosEmArea];
+    const outros = [...caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !cobertoPorCartao(a)), ...r.avisosEmArea, ...r.avisosFaixa];
     const linhaDasArvores = linhaArvores(r.arvores, r.limpeza);
-    const texto = resumoTexto(caso, r.projeto?.os ?? '', [...(linhaDasArvores ? [linhaDasArvores] : []), ...r.avisosEmArea.map((a) => `Aviso: ${a.texto}`)]);
+    const texto = resumoTexto(caso, r.projeto?.os ?? '', [...(linhaDasArvores ? [linhaDasArvores] : []), ...r.avisosEmArea.map((a) => `Aviso: ${a.texto}`), ...r.avisosFaixa.map((a) => `Aviso: ${a.texto}`)]);
     const paraConferir = outros.length + r.appsPendentes;
     return [
       h('div', { class: 'resumo-topo' },
