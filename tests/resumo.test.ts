@@ -62,4 +62,16 @@ describe('resumoTexto', () => {
     expect(t).toContain('entre o poste (0500010, 9500050) e o poste Nº 8 (0500318, 9500050)');
     expect(t).not.toContain('sem número');
   });
+
+  it('DNOCS leva o "a confirmar" no resumo', () => {
+    const t = resumoTexto(calcularCaso(redeMt, base([uc('Perimetro Inventado', ['Perímetros Irrigados DNOCS'])]), []), '');
+    expect(t).toContain('Órgão: licencia Município (Município a confirmar com o P&M); gestor DNOCS.');
+  });
+
+  it('APP confirmada: "sem gestor" em vez de "gestor Não há"', () => {
+    const app: AreaConfirmada = { nome: 'APP inventada', tipo: 'APP', poligonos: [[anel(500000, 9500000, 500400, 9500100)]], largura: 100 };
+    const t = resumoTexto(calcularCaso(redeMt, base([]), [app]), '');
+    expect(t).toContain('sem gestor.');
+    expect(t).not.toContain('Não há');
+  });
 });

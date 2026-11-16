@@ -1,5 +1,6 @@
 import type { Poste, Pt, TipoRede } from './tipos.ts';
 import type { Caso, Intervencao, Trecho } from './caso.ts';
+import type { Orgao } from './areas.ts';
 import { coordTexto, haTexto, metrosTexto } from './formato.ts';
 
 const NOME_REDE: Record<TipoRede, string> = {
@@ -24,13 +25,20 @@ function linhaDe(iv: Intervencao): string {
   return `A intervenção ocorrerá ${partes.join('; e ')}, com área de ${haTexto(iv.hectares)} ha, dentro de ${iv.area.nome}.`;
 }
 
+// "Não há" (APP) vira "sem gestor"; o que ainda está a confirmar com o P&M aparece junto de quem licencia
+function orgaoTexto(o: Orgao): string {
+  const licencia = o.aConfirmar ? `${o.licencia} (${o.aConfirmar} a confirmar com o P&M)` : o.licencia;
+  const gestor = /^n[aã]o h[aá]$/i.test(o.gestor.trim()) ? 'sem gestor' : `gestor ${o.gestor}`;
+  return `Órgão: licencia ${licencia}; ${gestor}.`;
+}
+
 export function resumoTexto(caso: Caso, os: string): string {
   const linhas: string[] = [];
   if (os.trim()) linhas.push(`OS ${os.trim()}`);
   if (caso.municipio) linhas.push(`Município: ${caso.municipio}`);
   for (const iv of caso.intervencoes) {
     linhas.push(linhaDe(iv));
-    linhas.push(iv.orgao ? `Órgão: licencia ${iv.orgao.licencia}; gestor ${iv.orgao.gestor}.` : 'Órgão: não identificado; consultar o P&M.');
+    linhas.push(iv.orgao ? orgaoTexto(iv.orgao) : 'Órgão: não identificado; consultar o P&M.');
   }
   for (const a of caso.avisos) linhas.push(`Aviso: ${a.texto}`);
   return linhas.join('\n');

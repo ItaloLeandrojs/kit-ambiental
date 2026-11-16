@@ -4,6 +4,8 @@ import { criarEstado, type Estado } from '../src/tela/estado.ts';
 import { criarPainel } from '../src/tela/painel.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import type { Pt } from '../src/nucleo/tipos.ts';
+import { readdirSync, readFileSync } from 'node:fs';
+import { PORQUE_AVISO } from '../src/regras/textos.ts';
 import { abrirZip } from '../src/nucleo/zip.ts';
 
 // tudo inventado, perto de (500000, 9500000)
@@ -184,5 +186,59 @@ describe('painel: conferir um zip', () => {
     const v = passo(7).querySelector('.item')!;
     expect(v.classList.contains('vermelho')).toBe(true);
     expect(v.textContent).toContain('Como corrigir:');
+  });
+});
+
+describe('painel: avisos e documentos', () => {
+  it('todo código de aviso do núcleo tem "Por que importa"', () => {
+    const dir = 'src/nucleo/';
+    const codigos = new Set<string>();
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.ts')) continue;
+      for (const m of readFileSync(dir + f, 'utf-8').matchAll(/codigo: '([A-Z_]+)'/g)) codigos.add(m[1]);
+    }
+    expect(codigos.size).toBeGreaterThan(8);
+    for (const c of codigos) expect(PORQUE_AVISO[c], c).toBeTruthy();
+  });
+
+  it('o aviso vermelho de bloqueio mostra "Por que importa"', async () => {
+    estado = criarEstado({ lerAreas: async () => BASE });
+    criarPainel(raiz, estado, { salvar });
+    await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
+    const longe = new TextEncoder().encode(texto([
+      [0, 'SECTION'], [2, 'ENTITIES'], [0, 'LINE'], [8, 'LINHAMT'], [10, 0], [20, 0], [11, 40], [21, 0],
+      [0, 'TEXT'], [8, 'ETIQ'], [10, 20], [20, 2], [1, '(1)2AN00438'], [0, 'ENDSEC'], [0, 'EOF'],
+    ]));
+    await estado.carregarProjeto(longe, 'obra.dxf', '0000000001');
+    expect(passo(3).querySelector('.aviso.vermelho')!.textContent).toContain('Por que importa');
+  });
+
+  it('duas águas, uma confirmada e outra sem resposta: o cartão da segunda continua e o aviso não some', async () => {
+    const acude2 = area(5, 'Lagoa Inventada', ['Recursos Hídricos - COGERH', 'Açudes Monitorados'], 499860, 9500000, 499960, 9500100);
+    estado = criarEstado({ lerAreas: async () => ({ ...BASE, areas: [UC, ACUDE, acude2] }) });
+    criarPainel(raiz, estado, { salvar });
+    await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
+    await estado.carregarProjeto(DXF, 'obra.dxf', '0000000001');
+    botao('Rede confirmada, ver o caso').click();
+    expect(estado.ler().apps).toHaveLength(2);
+    const i = estado.ler().apps.findIndex((a) => a.proposta.agua.id === 3);
+    estado.confirmarApp(i, 100);
+    expect(estado.ler().apps[1 - i].resposta).toBe('pendente');
+    expect(passo(5).textContent).toContain('Lagoa Inventada');
+    expect(passo(5).textContent).toContain('Rede nova a menos de 100 m de Lagoa Inventada.');
+    expect(passo(5).textContent).toContain('APP confirmada: Acude Inventado');
+  });
+
+  it('zip sem documentos: frase explicando, e os vermelhos continuam', async () => {
+    await noCaso();
+    botao('Confirmar APP').click();
+    const zip = estado.baixarPacote().bytes;
+    clicarPasso(7);
+    const ev = new Event('drop', { bubbles: true, cancelable: true });
+    (ev as unknown as { dataTransfer: unknown }).dataTransfer = { files: [new File([zip as BlobPart], 'kit.zip')] };
+    passo(7).querySelector('label.soltar')!.dispatchEvent(ev);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(passo(7).textContent).toContain('Este zip só tem a parte espacial (KML e SHP). Junte memorial, ART, CVT, planta e projeto antes de mandar ao órgão.');
+    expect(passo(7).querySelector('.item.vermelho')).not.toBeNull();
   });
 });

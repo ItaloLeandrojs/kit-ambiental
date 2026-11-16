@@ -25,5 +25,8 @@ export const PORQUE_AVISO: Record<string, string> = {
   PROXIMA: 'Não há intervenção, mas o órgão quer saber que você olhou.',
   LITORAL: 'Duna, restinga e beira-mar têm proteção própria e podem exigir processo.',
   SEM_ORGAO: 'Sem saber o órgão, o processo pode ser protocolado no lugar errado.',
+  ETIQUETA_LONGE: 'Se as coordenadas escritas não batem com o desenho, o kit pode sair deslocado e o órgão devolve.',
+  FORA_UTM: 'Um desenho fora das coordenadas reais não cai no mapa: o kit sairia deslocado e o órgão devolve.',
+  FORA_CEARA: 'Um desenho fora do Ceará não cruza com as áreas do KMZ: o resultado não valeria nada.',
   SEM_AREA: 'O KMZ não cobre todos os rios, lagoas e açudes: não ter área no KMZ não prova que não há APP.',
 };

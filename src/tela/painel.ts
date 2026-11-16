@@ -187,6 +187,8 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
   let avanco = 0; // 5 ou 6: a pessoa já seguiu do passo 3 para o caso (ou para o download)
   const larguras = new Map<number, string>(); // o que está escrito no campo de largura de cada APP
   let erroM2: string | null = null;
+  let ultimaBase: Retrato['base'] = null;
+  let ultimoProjeto: Retrato['projeto'] = null;
   let erroBaixar: string | null = null;
   let copia: 'nao' | 'copiado' | 'falhou' = 'nao';
   let conferencia: { arquivo: string; itens: ItemConferencia[] } | null = null;
@@ -396,9 +398,11 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
   }
 
   function passo5(r: Retrato, caso: Caso): Filho[] {
-    const temApp = r.apps.length >= caso.avisos.filter((a) => a.codigo === 'APP_POSSIVEL').length;
-    // o cartão de APP faz o papel do aviso APP_POSSIVEL (com a confirmação ao lado)
-    const outros = caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !(temApp && a.codigo === 'APP_POSSIVEL'));
+    // o cartão de APP faz o papel do aviso APP_POSSIVEL da sua água (o aviso fala "de <nome da água>")
+    const nomesComCartao = r.apps.map((a) => a.proposta.agua.nome);
+    const cobertoPorCartao = (a: Aviso): boolean =>
+      a.codigo === 'APP_POSSIVEL' && nomesComCartao.some((n) => a.texto.startsWith(`Rede nova a menos de 100 m de ${n}.`));
+    const outros = caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !cobertoPorCartao(a));
     const texto = resumoTexto(caso, r.projeto?.os ?? '');
     const paraConferir = outros.length + r.appsPendentes;
     return [
@@ -476,6 +480,8 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const itens = conferencia?.itens ?? [];
     const v = itens.filter((i) => i.nivel === 'vermelho').length;
     const a = itens.filter((i) => i.nivel === 'amarelo').length;
+    const docs = itens.filter((i) => i.codigo === 'DOCUMENTOS');
+    const semDocumentos = ['Falta: Memorial descritivo', 'Falta: ART', 'Falta: CVT'].every((t) => docs.some((d) => d.titulo === t));
     return [
       erroConferir ? h('p', { class: 'erro', role: 'alert' }, erroConferir) : null,
       conferencia
@@ -488,6 +494,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
         h('div', {}, h('div', { class: 'nome' }, 'DXF do projeto (opcional)'),
           h('div', { class: 'det' }, dxfConferir ? 'lido: os metros do zip são comparados com o desenho' : 'se você soltar o DXF, o site compara os metros')),
         botaoTrocar('.dxf', lerDxf, 'Escolher o DXF do projeto')),
+      semDocumentos ? h('p', { class: 'amarelo-txt', role: 'status' }, 'Este zip só tem a parte espacial (KML e SHP). Junte memorial, ART, CVT, planta e projeto antes de mandar ao órgão.') : null,
       ...itens.map(itemConferencia),
     ];
   }
@@ -517,6 +524,8 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const r = estado.ler();
     const atual = passoAtual(r);
     if (atual < 3) avanco = 0;
+    // outro KMZ ou outro projeto: o que estava escrito nos campos de largura é de outra obra
+    if (r.base !== ultimaBase || r.projeto !== ultimoProjeto) { larguras.clear(); ultimaBase = r.base; ultimoProjeto = r.projeto; }
     if (atual !== atualAnterior) { abertura.clear(); atualAnterior = atual; }
 
     // foco e rolagem sobrevivem ao redesenho (a tabela muda a cada clique)
