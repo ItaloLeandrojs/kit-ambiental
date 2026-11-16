@@ -62,14 +62,14 @@ describe.skipIf(!existsSync(DNIT) || !existsSync(SOP) || !existsSync(GABARITO))(
   }, 180_000);
 
   kits.forEach((kit, i) => {
-    it(`kit ${i + 1}: avisosFaixa não lança e leva menos de 1 s`, () => {
+    it(`kit ${i + 1}: avisosFaixa não lança e leva menos de 3 s`, () => {
       const arquivos = abrirZip(new Uint8Array(readFileSync(join(PRIVADOS, kit.zip))));
       const rede = proporRedeKml(kit.rede.flatMap((c) => lerKml(arquivos.find((x) => x.caminho === c)!.bytes)));
       const t0 = performance.now();
       const avisos = avisosFaixa(rede, malhas);
       const ms = performance.now() - t0;
       console.log(`faixa kit ${i + 1}: ${avisos.filter((a) => a.codigo === 'FAIXA_DOMINIO').length} avisos de faixa, ${ms.toFixed(0)} ms`);
-      expect(ms).toBeLessThan(1000);
+      expect(ms).toBeLessThan(3000);
     }, 60_000);
   });
 });

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { criarEstado, type Estado } from '../src/tela/estado.ts';
-import { criarPainel, nomeDoVao, totaisDaRede } from '../src/tela/painel.ts';
+import { criarPainel, criarStatus, nomeDoVao, totaisDaRede } from '../src/tela/painel.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import type { Poste, Pt, Vao } from '../src/nucleo/tipos.ts';
 
@@ -81,6 +81,27 @@ describe('painel', () => {
     expect(botao().textContent).toBe('MT');
     botao().click();
     expect(botao().textContent).toBe('BT');
+  });
+
+  it('o nome acessível do botão do vão começa pelo texto que se vê nele (WCAG 2.5.3)', async () => {
+    await comKmz();
+    await estado.carregarProjeto(DXF, 'obra.dxf', '0000000001');
+    const botao = passo(3).querySelector<HTMLButtonElement>('button.ciclo[data-vao="v1"]')!;
+    expect(botao.getAttribute('aria-label')!.startsWith(botao.textContent!)).toBe(true);
+    botao.click(); botao.click(); botao.click(); // chega em Fora
+    const fora = passo(3).querySelector<HTMLButtonElement>('button.ciclo[data-vao="v1"]')!;
+    expect(fora.textContent).toBe('Fora');
+    expect(fora.getAttribute('aria-label')!.startsWith('Fora')).toBe(true);
+  });
+
+  it('a barra de status mostra e tira o aviso de base de estradas', () => {
+    const barra = document.createElement('footer');
+    const b = criarStatus(barra, estado);
+    expect(barra.textContent).not.toContain('Sem a base de estradas');
+    b.aviso('Sem a base de estradas: o mapa fica sem elas');
+    expect(barra.textContent).toContain('Sem a base de estradas');
+    b.aviso(null);
+    expect(barra.textContent).not.toContain('Sem a base de estradas');
   });
 
   it('o passo 5 só abre sem bloqueio', async () => {

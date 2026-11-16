@@ -154,7 +154,7 @@ function linhasDoAviso(a: Aviso, porque?: string): Filho[] {
 function blocoAviso(a: Aviso): HTMLElement {
   const titulo = a.nivel === 'vermelho' && !a.codigo.startsWith('ARVORE_') ? 'Pare e confira' : (TITULO_AVISO[a.codigo] ?? (a.nivel === 'vermelho' ? 'Pare e confira' : 'Confira'));
   return h('div', { class: `aviso ${a.nivel}`, role: a.nivel === 'vermelho' ? 'alert' : undefined },
-    h('h3', {}, titulo, h('span', { class: 'cod' }, a.codigo)),
+    h('h2', {}, titulo, h('span', { class: 'cod' }, a.codigo)),
     h('dl', {}, ...linhasDoAviso(a)));
 }
 
@@ -168,7 +168,7 @@ function linhaIntervencao(iv: Intervencao, aoMudarM2: (id: string, texto: string
   const o = iv.orgao;
   const entre = entreTexto(iv);
   return h('article', { class: o && !o.aConfirmar ? 'cartao' : 'cartao atencao' },
-    h('h3', {}, iv.area.nome),
+    h('h2', {}, iv.area.nome),
     o ? h('div', { class: 'tipo-area' }, `${o.categoria} (${o.esfera})`) : null,
     o
       ? h('div', { class: 'orgaos' },
@@ -360,7 +360,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     }
     if (r.liberado) {
       return h('div', { class: 'aviso amarelo' },
-        h('h3', {}, 'Etiquetas liberadas por você', h('span', { class: 'cod' }, 'ETIQUETA_LONGE')),
+        h('h2', {}, 'Etiquetas liberadas por você', h('span', { class: 'cod' }, 'ETIQUETA_LONGE')),
         h('p', {}, 'As coordenadas escritas nas etiquetas não batem com o desenho, e você confirmou que o desenho está no lugar certo.'),
         caixaEtiqueta(true));
     }
@@ -382,13 +382,15 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       const nome = nomeDoVao(v, rede.postes);
       const tipoTexto = v.tipo === null ? '?' : TIPO_TEXTO[v.tipo];
       const situacao = SITUACAO_TEXTO[v.situacao];
+      // o nome acessível do botão começa pelo texto que a pessoa vê nele
+      const visivel = !novo ? 'Fora' : v.tipo === null ? 'Sem tipo' : tipoTexto;
       return h('tr', { class: `vao-linha${novo && v.tipo !== null ? '' : ' fora-da-conta'}${novo && v.tipo === null ? ' sem-tipo' : ''}` },
         h('td', {}, nome),
         h('td', {}, h('button', {
           type: 'button', class: 'ciclo', 'data-vao': v.id,
-          'aria-label': `Vão ${nome}: ${tipoTexto}, ${situacao}. Trocar a marca.`,
+          'aria-label': `${visivel}: vão ${nome}, ${situacao}. Trocar a marca.`,
           onclick: () => estado.marcarVao(v.id),
-        }, h('span', { class: `tipo ${classe}` }, !novo ? 'Fora' : v.tipo === null ? 'Sem tipo' : tipoTexto))),
+        }, h('span', { class: `tipo ${classe}` }, visivel))),
         h('td', { class: 'sit' }, situacao),
         h('td', { class: 'n' }, metrosTexto(comprimento(v.pts))));
     });
@@ -502,13 +504,13 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const nome = a.proposta.agua.nome;
     if (a.resposta === 'confirmada') {
       return h('article', { class: 'cartao' },
-        h('h3', {}, `APP confirmada: ${nome}`),
+        h('h2', {}, `APP confirmada: ${nome}`),
         h('p', { class: 'nota' }, `Largura de ${m2Texto(a.proposta.largura)} m. Entrou na conta (metros e hectares) e nas camadas do kit. Confira em campo.`),
         h('button', { type: 'button', class: 'botao mini', onclick: () => estado.reabrirApp(i) }, 'Desfazer'));
     }
     if (a.resposta === 'recusada') {
       return h('article', { class: 'cartao atencao' },
-        h('h3', {}, `Sem APP: ${nome}`),
+        h('h2', {}, `Sem APP: ${nome}`),
         h('p', { class: 'nota' }, 'Você disse que a margem não é APP. A margem não entra na conta nem no kit.'),
         h('button', { type: 'button', class: 'botao mini', onclick: () => estado.reabrirApp(i) }, 'Voltar atrás'));
     }
@@ -521,7 +523,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     });
     const largura = (): number => Number((campo.value || '').replace(',', '.'));
     return h('div', { class: 'aviso amarelo' },
-      h('h3', {}, 'Possível APP', h('span', { class: 'cod' }, 'APP_POSSIVEL')),
+      h('h2', {}, 'Possível APP', h('span', { class: 'cod' }, 'APP_POSSIVEL')),
       h('dl', {},
         h('dt', {}, 'O que é'), h('dd', {}, `Rede nova a menos de 100 m de ${nome}. APP é a margem protegida em volta da água.`),
         h('dt', {}, 'Por que importa'), h('dd', {}, a.proposta.porque),
@@ -730,11 +732,12 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
   return { desenhar };
 }
 
-export interface BarraStatus { cursor(p: Pt | null): void }
+export interface BarraStatus { cursor(p: Pt | null): void; /** Aviso curto na barra (ou null para tirar). */ aviso(texto: string | null): void }
 
 export function criarStatus(raiz: HTMLElement, estado: Estado): BarraStatus {
   // o cursor muda a cada movimento do mouse: só o texto dele é trocado, o resto não é redesenhado
   const posicao = h('span', {});
+  let aviso: string | null = null;
   const escreve = (p: Pt | null) => {
     posicao.textContent = p ? `E ${milhar(Math.round(p[0]))} · N ${milhar(Math.round(p[1]))}` : 'E · · N ·';
   };
@@ -744,6 +747,7 @@ export function criarStatus(raiz: HTMLElement, estado: Estado): BarraStatus {
     raiz.replaceChildren(...[
       posicao,
       h('span', {}, 'UTM 24S · SIRGAS 2000'),
+      aviso ? h('span', { class: 'aviso-barra', role: 'status' }, aviso) : null,
       t ? h('span', {}, 'Rede nova: ', h('b', {}, `MT ${metrosTexto(t.MT)} m`), ' · ', h('b', {}, `BT ${metrosTexto(t.BT)} m`), ' · ', h('b', {}, `Conj. ${metrosTexto(t.CONJ)} m`)) : null,
       r.trabalho
         ? h('span', { class: 'dir ocupado', role: 'status' }, r.trabalho)
@@ -752,5 +756,5 @@ export function criarStatus(raiz: HTMLElement, estado: Estado): BarraStatus {
   escreve(null);
   estado.aoMudar(desenhar);
   desenhar();
-  return { cursor: escreve };
+  return { cursor: escreve, aviso: (t) => { aviso = t; desenhar(); } };
 }

@@ -60,7 +60,11 @@ estado.aoMudar(() => {
   const chave = [janela.x0, janela.y0, janela.x1, janela.y1].map((n) => Math.round(n / 1000)).join(',');
   if (chave === chaveEstradas) return;
   chaveEstradas = chave;
-  carregarBase(janela, buscar, 10000).then((b) => mapa.definirEstradas(b.arestas), () => { /* estrada é só referência: sem ela o mapa segue */ });
+  // estrada é só referência: sem ela o mapa segue, com um aviso na barra
+  carregarBase(janela, buscar, 10000).then(
+    (b) => { barra.aviso(null); mapa.definirEstradas(b.arestas); },
+    () => { mapa.definirEstradas([]); barra.aviso('Sem a base de estradas: o mapa fica sem elas'); },
+  );
 });
 
 void estado.iniciar();

@@ -90,7 +90,7 @@ describe('painel: caso', () => {
   it('o cartão tem o nome exato da área, os metros e os hectares do padrão', async () => {
     await noCaso();
     const uc = [...passo(5).querySelectorAll('article.cartao')].find((c) => c.textContent!.includes('UC Inventada'))!;
-    expect(uc.querySelector('h3')!.textContent).toBe('UC Inventada');
+    expect(uc.querySelector('h2')!.textContent).toBe('UC Inventada');
     expect(uc.querySelector('.nums')!.textContent).toContain('100 m');
     expect(uc.querySelector('.ha')!.textContent).toContain('0,0600 ha'); // 100 m × 6 m
   });
