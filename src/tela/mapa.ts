@@ -44,7 +44,9 @@ function alivia(anel: Pt[]): Pt[] {
   return r.length >= 3 ? r : anel;
 }
 
-function caixaDaRede(rede: Rede): Caixa | null {
+// Só os vãos enquadram a obra; poste novo entra se não houver vão. Poste existente solto no desenho
+// (o DXF traz postes do Ceará inteiro) nunca entra: abriria o mapa em centenas de km.
+export function caixaDaRede(rede: Rede): Caixa | null {
   const c: Caixa = [Infinity, Infinity, -Infinity, -Infinity];
   const ve = (p: Pt) => {
     if (p[0] < c[0]) c[0] = p[0];
@@ -53,7 +55,10 @@ function caixaDaRede(rede: Rede): Caixa | null {
     if (p[1] > c[3]) c[3] = p[1];
   };
   for (const v of rede.vaos) v.pts.forEach(ve);
-  for (const p of rede.postes) ve(p.ponto);
+  if (!Number.isFinite(c[0])) {
+    const novos = rede.postes.filter((p) => p.novo);
+    (novos.length ? novos : rede.postes).forEach((p) => ve(p.ponto));
+  }
   return Number.isFinite(c[0]) ? c : null;
 }
 

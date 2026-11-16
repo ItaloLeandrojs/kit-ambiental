@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { classeDoVao, criarMapa } from '../src/tela/mapa.ts';
+import { caixaDaRede, classeDoVao, criarMapa } from '../src/tela/mapa.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import type { Poste, Pt, Rede, Vao } from '../src/nucleo/tipos.ts';
 
@@ -122,5 +122,21 @@ describe('mapa', () => {
     const mexido = m.elemento.getAttribute('viewBox');
     m.atualizar({ base: BASE, rede: { ...REDE, vaos: [{ ...REDE.vaos[0], tipo: 'BT' }, REDE.vaos[1]] } });
     expect(m.elemento.getAttribute('viewBox')).toBe(mexido);
+  });
+
+  it('poste existente a 400 km não muda a caixa nem traz área distante', () => {
+    const longe: Rede = { ...REDE, postes: [...REDE.postes, poste('x', [100000, 9100000], { novo: false })] };
+    expect(caixaDaRede(longe)).toEqual(caixaDaRede(REDE));
+    const m = criarMapa(raiz, { marcarVao: () => {} });
+    const base: BaseAreas = { ...BASE, areas: [...BASE.areas, area(9, 'Perto do poste solto', ['Unidade de Conservação Estadual'], 99900, 9099900, 100100, 9100100)] };
+    m.atualizar({ base, rede: longe });
+    const nomes = [...m.elemento.querySelectorAll('.areas path title')].map((t) => t.textContent);
+    expect(nomes).not.toContain('Perto do poste solto');
+    expect(Number(m.elemento.getAttribute('viewBox')!.split(' ')[2])).toBeLessThan(2000);
+  });
+
+  it('sem vão, só o poste novo enquadra', () => {
+    const r: Rede = { origem: 'dxf', vaos: [], postes: [poste('a', [500000, 9500000]), poste('b', [100000, 9100000], { novo: false })] };
+    expect(caixaDaRede(r)).toEqual([500000, 9500000, 500000, 9500000]);
   });
 });

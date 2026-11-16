@@ -128,6 +128,23 @@ describe('estado: bloqueios', () => {
   });
 });
 
+describe('estado: liberação da etiqueta', () => {
+  const longe = (dist: number) => dxf([
+    ...lado([500010, 9500050], [500050, 9500050]), ...etiqueta([500030, 9500050]),
+    [0, 'MTEXT'], [8, 'ETIQ'], [10, 500010], [20, 9500050], [1, `(1)1234/12\P(${String(500010 + dist).padStart(7, '0')}, 9500050)`],
+  ]);
+
+  it('a liberação cai quando o resultado da conferência muda (outro projeto, outra distância)', async () => {
+    const e = await comProjeto(longe(3000));
+    e.liberarEtiqueta(true);
+    e.marcarVao('v1'); // marcar vão não muda a conferência: segue liberado
+    expect(e.ler().liberado).toBe(true);
+    await e.carregarProjeto(longe(4000), 'outra.dxf', '0000000001');
+    expect(e.ler().liberado).toBe(false);
+    expect(e.ler().bloqueio?.codigo).toBe('ETIQUETA_LONGE');
+  });
+});
+
 describe('estado: marcar vãos', () => {
   it('marcar um vão como fora tira os metros dele do caso', async () => {
     const e = await comProjeto();

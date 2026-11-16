@@ -4,7 +4,7 @@ import type { Pt } from '../nucleo/tipos.ts';
 import type { BaseAreas } from '../nucleo/areas.ts';
 import { guardar, ler } from './armazem.ts';
 import { criarEstado } from './estado.ts';
-import { criarMapa } from './mapa.ts';
+import { caixaDaRede, criarMapa } from './mapa.ts';
 import { criarPainel, criarStatus } from './painel.ts';
 import type { RespostaKmz } from './trabalhador.ts';
 
@@ -41,10 +41,9 @@ estado.aoMudar(() => {
   const r = estado.ler();
   mapa.atualizar(r);
   if (!r.rede) { chaveEstradas = ''; return; }
-  const pts = [...r.rede.vaos.flatMap((v) => v.pts), ...r.rede.postes.map((p) => p.ponto)];
-  if (!pts.length) return;
-  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const janela = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+  const caixa = caixaDaRede(r.rede);
+  if (!caixa) return;
+  const janela = { x0: caixa[0], y0: caixa[1], x1: caixa[2], y1: caixa[3] };
   const chave = [janela.x0, janela.y0, janela.x1, janela.y1].map((n) => Math.round(n / 1000)).join(',');
   if (chave === chaveEstradas) return;
   chaveEstradas = chave;

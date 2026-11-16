@@ -77,6 +77,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   let dxf: DxfGeo | null = null;
   let projeto: Projeto | null = null;
   let liberado = false;
+  let chaveEtiqueta = ''; // o que a caixa liberou; se o resultado da conferência mudar, a liberação cai
   let ocupado = false;
   let erro: string | null = null;
   let erroPasso: 1 | 2 | null = null;
@@ -99,7 +100,10 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     caso = null;
     if (!rede || !base) return;
     const local = conferirLocal(rede, base.municipios);
-    let b: Aviso | null = local ?? conferirEtiquetas(rede).aviso;
+    const etiqueta = conferirEtiquetas(rede).aviso;
+    const chave = etiqueta?.texto ?? '';
+    if (chave !== chaveEtiqueta) { liberado = false; chaveEtiqueta = chave; }
+    let b: Aviso | null = local ?? etiqueta;
     if (b?.codigo === 'ETIQUETA_LONGE' && liberado) b = null; // só a etiqueta se libera; FORA_UTM e FORA_CEARA não
     bloqueio = b;
     if (!b) caso = calcularCaso(rede, base, []);
@@ -134,7 +138,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         const lida = await lerAreas(bytes, nome);
         base = lida;
         kmzNome = nome;
-        rede = null; dxf = null; projeto = null; liberado = false;
+        rede = null; dxf = null; projeto = null; liberado = false; chaveEtiqueta = '';
         recalcular();
         if (armazem) {
           try { await armazem.guardar(CHAVE_BASE, { nome, base: lida }); } catch { /* segue sem guardar */ }
@@ -173,7 +177,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         rede = novaRede;
         dxf = novoDxf;
         projeto = { nome, os: os.trim(), detalhe };
-        liberado = false;
+        liberado = false; chaveEtiqueta = '';
         recalcular();
       } catch (e) {
         erro = mensagem(e); erroPasso = 2;
