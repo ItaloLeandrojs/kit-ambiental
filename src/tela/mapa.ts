@@ -2,7 +2,7 @@
 // Mostra os vãos (cor por tipo e situação), os postes, os contornos das áreas a até 1 km e as estradas da base.
 // Tamanhos de traço são em pixels (vector-effect), nunca em metros.
 import { ehAgua } from '../nucleo/areas.ts';
-import type { Aresta } from '../nucleo/base.ts';
+import type { Aresta, Janela } from '../nucleo/base.ts';
 import type { Poste, Pt, Rede, Vao } from '../nucleo/tipos.ts';
 import type { Retrato } from './estado.ts';
 
@@ -291,4 +291,40 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
       }
     },
   };
+}
+
+export const AVISO_SEM_ESTRADAS = 'Sem a base de estradas: o mapa fica sem elas';
+
+/**
+ * Estradas: busca de novo só quando a obra muda de lugar. A resposta de uma janela que já não é a atual
+ * (a obra mudou de lugar ou saiu) é ignorada: não troca nem apaga as estradas da busca nova.
+ * Estrada é só referência: sem ela o mapa segue, com um aviso na barra; sem projeto, o aviso sai.
+ */
+export function ligarEstradas(
+  estado: { ler(): Retrato; aoMudar(f: () => void): () => void },
+  mapa: Pick<Mapa, 'atualizar' | 'definirEstradas'>,
+  avisar: (texto: string | null) => void,
+  carregar: (janela: Janela) => Promise<Aresta[]>,
+): void {
+  let chave = '';
+  let comAviso = false;
+  const aviso = (t: string | null) => { comAviso = t !== null; avisar(t); };
+  estado.aoMudar(() => {
+    const r = estado.ler();
+    mapa.atualizar(r);
+    const caixa = r.rede ? caixaDaRede(r.rede) : null;
+    if (!caixa) {
+      chave = '';
+      if (comAviso) aviso(null);
+      return;
+    }
+    const janela: Janela = { x0: caixa[0], y0: caixa[1], x1: caixa[2], y1: caixa[3] };
+    const nova = [janela.x0, janela.y0, janela.x1, janela.y1].map((n) => Math.round(n / 1000)).join(',');
+    if (nova === chave) return;
+    chave = nova;
+    carregar(janela).then(
+      (arestas) => { if (chave !== nova) return; aviso(null); mapa.definirEstradas(arestas); },
+      () => { if (chave !== nova) return; mapa.definirEstradas([]); aviso(AVISO_SEM_ESTRADAS); },
+    );
+  });
 }

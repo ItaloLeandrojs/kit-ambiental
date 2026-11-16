@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { caixaDaRede, classeDoVao, criarMapa } from '../src/tela/mapa.ts';
+import { AVISO_SEM_ESTRADAS, caixaDaRede, classeDoVao, criarMapa, ligarEstradas } from '../src/tela/mapa.ts';
+import type { Aresta } from '../src/nucleo/base.ts';
+import type { Retrato } from '../src/tela/estado.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import type { Poste, Pt, Rede, Vao } from '../src/nucleo/tipos.ts';
 
@@ -178,5 +180,51 @@ describe('mapa', () => {
       m.elemento.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       expect(fechou).toBe(1);
     });
+  });
+});
+
+describe('estradas do mapa (busca por janela)', () => {
+  // estado de mentira: só a rede muda; quem escuta é chamado a cada troca
+  function estadoFalso(rede: Rede | null) {
+    let r = { base: BASE, rede } as unknown as Retrato;
+    const ouvintes: (() => void)[] = [];
+    return {
+      ler: () => r,
+      aoMudar: (f: () => void) => { ouvintes.push(f); return () => {}; },
+      trocar(rede: Rede | null) { r = { base: BASE, rede } as unknown as Retrato; ouvintes.forEach((f) => f()); },
+    };
+  }
+  const longe: Rede = { ...REDE, vaos: [vao('v9', [[530000, 9530000], [530100, 9530000]])], postes: [] };
+  const aresta = (id: number): Aresta => ({ id, a: 1, b: 2, ref: '', classe: 'primary', m: 1, pts: [[0, 0], [1, 1]] });
+
+  it('a resposta de uma busca velha que chega depois não apaga nem troca as estradas da busca nova', async () => {
+    const e = estadoFalso(REDE);
+    const definidas: number[][] = [];
+    const avisos: (string | null)[] = [];
+    const pedidos: { resolver: (a: Aresta[]) => void; falhar: () => void }[] = [];
+    ligarEstradas(e, { atualizar: () => {}, definirEstradas: (a) => { definidas.push(a.map((x) => x.id)); } }, (t) => avisos.push(t),
+      () => new Promise<Aresta[]>((resolver, falhar) => { pedidos.push({ resolver, falhar: () => falhar(new Error('x')) }); }));
+    e.trocar(REDE);
+    expect(pedidos).toHaveLength(1);
+    e.trocar(longe); // a obra mudou de lugar: busca nova
+    expect(pedidos).toHaveLength(2);
+    pedidos[1].resolver([aresta(2)]);
+    await Promise.resolve();
+    pedidos[0].falhar(); // a velha falha depois: não pode apagar as estradas nem avisar
+    pedidos[0].resolver([aresta(1)]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(definidas).toEqual([[2]]);
+    expect(avisos.filter((a) => a !== null)).toEqual([]);
+  });
+
+  it('busca que falha avisa na barra; tirar o projeto tira o aviso', async () => {
+    const e = estadoFalso(REDE);
+    const avisos: (string | null)[] = [];
+    ligarEstradas(e, { atualizar: () => {}, definirEstradas: () => {} }, (t) => avisos.push(t), () => Promise.reject(new Error('x')));
+    e.trocar(REDE);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(avisos[avisos.length - 1]).toBe(AVISO_SEM_ESTRADAS);
+    e.trocar(null);
+    expect(avisos[avisos.length - 1]).toBeNull();
   });
 });

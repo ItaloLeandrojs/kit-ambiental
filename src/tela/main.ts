@@ -4,7 +4,7 @@ import type { Pt } from '../nucleo/tipos.ts';
 import type { BaseAreas } from '../nucleo/areas.ts';
 import { guardar, ler } from './armazem.ts';
 import { criarEstado } from './estado.ts';
-import { caixaDaRede, criarMapa } from './mapa.ts';
+import { criarMapa, ligarEstradas } from './mapa.ts';
 import { criarPainel, criarStatus } from './painel.ts';
 import type { Malha, TipoMalha } from '../nucleo/faixa.ts';
 import type { PedidoTrabalho, RespostaTrabalho } from './trabalhador.ts';
@@ -48,23 +48,7 @@ const mapa = criarMapa(document.getElementById('palco')!, { marcarVao: (id) => e
 criarPainel(document.getElementById('passos')!, estado);
 document.getElementById('ajustar')!.addEventListener('click', () => mapa.ajustar());
 
-// estradas: busca de novo só quando a obra muda de lugar
-let chaveEstradas = '';
-estado.aoMudar(() => {
-  const r = estado.ler();
-  mapa.atualizar(r);
-  if (!r.rede) { chaveEstradas = ''; return; }
-  const caixa = caixaDaRede(r.rede);
-  if (!caixa) return;
-  const janela = { x0: caixa[0], y0: caixa[1], x1: caixa[2], y1: caixa[3] };
-  const chave = [janela.x0, janela.y0, janela.x1, janela.y1].map((n) => Math.round(n / 1000)).join(',');
-  if (chave === chaveEstradas) return;
-  chaveEstradas = chave;
-  // estrada é só referência: sem ela o mapa segue, com um aviso na barra
-  carregarBase(janela, buscar, 10000).then(
-    (b) => { barra.aviso(null); mapa.definirEstradas(b.arestas); },
-    () => { mapa.definirEstradas([]); barra.aviso('Sem a base de estradas: o mapa fica sem elas'); },
-  );
-});
+// estradas: busca de novo só quando a obra muda de lugar; resposta de janela velha é ignorada
+ligarEstradas(estado, mapa, (t) => barra.aviso(t), async (janela) => (await carregarBase(janela, buscar, 10000)).arestas);
 
 void estado.iniciar();
