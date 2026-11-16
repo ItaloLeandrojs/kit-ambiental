@@ -1,0 +1,372 @@
+// Painel de passos. Fica aberto só o passo atual; os passos feitos viram uma linha de resumo,
+// e clicar no resumo reabre o passo. Os passos 4, 6 e 7 vêm nas próximas tarefas.
+import type { Aviso, Poste, Pt, TipoRede, Vao } from '../nucleo/tipos.ts';
+import type { Caso, Intervencao } from '../nucleo/caso.ts';
+import { haTexto, metrosTexto } from '../nucleo/formato.ts';
+import { resumoTexto } from '../nucleo/resumo.ts';
+import { contaNaRede, osValida, type Estado, type Retrato } from './estado.ts';
+import { SITUACAO_TEXTO, TIPO_TEXTO } from './mapa.ts';
+
+type Filho = Node | string | null | false | undefined;
+type Attrs = Record<string, string | number | boolean | ((e: Event) => void) | undefined>;
+
+// monta DOM sem innerHTML: nome de arquivo e de área são texto, nunca HTML
+function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs = {}, ...filhos: Filho[]): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === undefined || v === false) continue;
+    if (typeof v === 'function') e.addEventListener(k.replace(/^on/, ''), v);
+    else if (v === true) e.setAttribute(k, '');
+    else if (k === 'value') (e as unknown as HTMLInputElement).value = String(v);
+    else e.setAttribute(k, String(v));
+  }
+  for (const f of filhos) if (f) e.append(f);
+  return e;
+}
+
+const PASSOS = [
+  { n: 1, titulo: 'KMZ de Áreas Protegidas' },
+  { n: 2, titulo: 'Projeto' },
+  { n: 3, titulo: 'Confirmar a rede' },
+  { n: 4, titulo: 'Árvores' },
+  { n: 5, titulo: 'O caso' },
+  { n: 6, titulo: 'Baixar' },
+  { n: 7, titulo: 'Conferir um zip' },
+] as const;
+const EM_BREVE = new Set([4, 6, 7]);
+const AVISOS_DA_REDE = new Set(['POSTE_A_CONFIRMAR', 'SEM_REDE_NOVA']); // aparecem no passo 3, não no 5
+const PRAZO_POSTE = 5; // m: poste que dá nome à ponta do vão
+
+const milhar = (n: number): string => n.toLocaleString('pt-BR');
+const comprimento = (p: Pt[]): number => p.slice(1).reduce((s, q, i) => s + Math.hypot(q[0] - p[i][0], q[1] - p[i][1]), 0);
+
+function posteDa(postes: Poste[], p: Pt): Poste | null {
+  let m: Poste | null = null;
+  let d = PRAZO_POSTE;
+  for (const q of postes) {
+    const x = Math.hypot(q.ponto[0] - p[0], q.ponto[1] - p[1]);
+    if (x <= d) { m = q; d = x; }
+  }
+  return m;
+}
+
+export function nomeDoVao(v: Vao, postes: Poste[]): string {
+  const a = posteDa(postes, v.pts[0]);
+  const b = posteDa(postes, v.pts[v.pts.length - 1]);
+  return a?.numero && b?.numero ? `P-${a.numero} a P-${b.numero}` : v.id;
+}
+
+export function totaisDaRede(vaos: Vao[]): Record<TipoRede, number> & { semTipo: number } {
+  const t = { MT: 0, BT: 0, CONJ: 0, semTipo: 0 };
+  for (const v of vaos) {
+    if (v.situacao !== 'novo') continue;
+    if (v.tipo === null) t.semTipo++;
+    else t[v.tipo] += comprimento(v.pts);
+  }
+  return t;
+}
+
+const lerBytes = async (f: File): Promise<Uint8Array> => new Uint8Array(await f.arrayBuffer());
+
+// zona de soltar arquivo; o input escondido também abre pelo teclado
+function zona(texto: string, accept: string, aoEscolher: (f: File) => void, rotulo: string): HTMLElement {
+  const entrada = h('input', { type: 'file', accept, 'aria-label': rotulo, onchange: (e) => {
+    const f = (e.target as HTMLInputElement).files?.[0];
+    if (f) aoEscolher(f);
+  } });
+  const z = h('label', {
+    class: 'soltar',
+    ondragover: (e) => { e.preventDefault(); z.classList.add('sobre'); },
+    ondragleave: () => z.classList.remove('sobre'),
+    ondrop: (e) => {
+      e.preventDefault();
+      z.classList.remove('sobre');
+      const f = (e as DragEvent).dataTransfer?.files?.[0];
+      if (f) aoEscolher(f);
+    },
+  }, texto, entrada);
+  return z;
+}
+
+function botaoTrocar(accept: string, aoEscolher: (f: File) => void, rotulo: string): HTMLElement {
+  const entrada = h('input', { type: 'file', accept, 'aria-label': rotulo, class: 'so-leitor', tabindex: -1, style: 'display:none', onchange: (e) => {
+    const f = (e.target as HTMLInputElement).files?.[0];
+    if (f) aoEscolher(f);
+  } });
+  return h('span', {}, h('button', { type: 'button', class: 'link', onclick: () => entrada.click() }, 'trocar'), entrada);
+}
+
+function blocoAviso(a: Aviso): HTMLElement {
+  return h('div', { class: `aviso ${a.nivel}`, role: a.nivel === 'vermelho' ? 'alert' : undefined },
+    h('h3', {}, a.nivel === 'vermelho' ? 'Pare e confira' : 'Confira', h('span', { class: 'cod' }, a.codigo)),
+    h('dl', {},
+      h('dt', {}, 'O que é'), h('dd', {}, a.texto),
+      h('dt', {}, 'O que fazer'), h('dd', {}, a.comoCorrigir)));
+}
+
+function linhaIntervencao(iv: Intervencao): HTMLElement {
+  const m = iv.metros;
+  return h('article', { class: iv.orgao ? 'cartao' : 'cartao atencao' },
+    h('h3', {}, iv.area.nome),
+    iv.orgao
+      ? h('div', { class: 'orgaos' },
+        h('span', {}, 'Protocolar em: ', h('b', {}, iv.orgao.licencia)),
+        h('span', {}, 'Anuência (autorização do gestor): ', h('b', {}, iv.orgao.gestor)))
+      : h('p', { class: 'nota' }, 'Órgão não identificado; consultar o P&M.'),
+    h('div', { class: 'nums' },
+      h('div', {}, h('b', {}, `${metrosTexto(m.MT)} m`), h('span', {}, 'MT')),
+      h('div', {}, h('b', {}, `${metrosTexto(m.BT)} m`), h('span', {}, 'BT')),
+      h('div', {}, h('b', {}, `${metrosTexto(m.CONJ)} m`), h('span', {}, 'conjugada'))),
+    h('div', { class: 'ha' }, 'Área de intervenção: ', h('b', {}, `${haTexto(iv.hectares)} ha`)));
+}
+
+export interface Painel { desenhar(): void }
+
+export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
+  let os = '';
+  let atualAnterior = 0;
+  const abertura = new Map<number, boolean>(); // o que a pessoa abriu ou fechou à mão
+  let projetoLido: { bytes: Uint8Array; nome: string } | null = null;
+
+  const lerProjeto = (f: File) => {
+    void lerBytes(f).then((bytes) => {
+      projetoLido = { bytes, nome: f.name };
+      return estado.carregarProjeto(bytes, f.name, os);
+    });
+  };
+
+  function passoAtual(r: Retrato): number {
+    if (!r.base) return 1;
+    if (!r.rede) return 2;
+    return 3;
+  }
+
+  function resumoDoPasso(n: number, r: Retrato): string | null {
+    if (n === 1 && r.base) {
+      const quantas = `${milhar(r.base.areas.length)} áreas`;
+      return r.base.revisao === '?' ? `Revisão não identificada · ${quantas}` : `Rev. ${r.base.revisao} · ${r.base.data} · ${quantas}`;
+    }
+    if (n === 2 && r.projeto) return `OS ${r.projeto.os} · ${r.projeto.nome}`;
+    if (n === 3 && r.rede) {
+      const novos = r.rede.vaos.filter(contaNaRede).length;
+      return `${novos} de ${r.rede.vaos.length} vãos são rede nova`;
+    }
+    if (n === 5 && r.caso) return `${r.caso.intervencoes.length} áreas cruzadas · ${r.caso.avisos.length} avisos`;
+    return null;
+  }
+
+  function passo1(r: Retrato): Filho[] {
+    const base = r.base;
+    const lerKmz = (f: File) => void lerBytes(f).then((b) => estado.carregarKmz(b, f.name));
+    const avisoRevisao = base?.revisao === '?'
+      ? h('p', { class: 'amarelo-txt' }, 'Revisão não identificada no nome do arquivo; confira se é a mais nova.')
+      : null;
+    return [
+      r.erroPasso === 1 && r.erro ? h('p', { class: 'erro', role: 'alert' }, r.erro) : null,
+      r.ocupado && r.trabalho ? h('p', { class: 'ajuda', role: 'status' }, r.trabalho) : null,
+      base
+        ? h('div', { class: 'arquivo' },
+          h('div', {}, h('div', { class: 'nome' }, r.kmzNome ?? 'KMZ'),
+            h('div', { class: 'det' }, base.revisao === '?' ? 'lido e guardado neste computador' : `Rev. ${base.revisao} · ${base.data} · lido e guardado neste computador`)),
+          botaoTrocar('.kmz,.kml', lerKmz, 'Escolher outro KMZ de Áreas Protegidas'))
+        : zona('Arraste aqui o KMZ de Áreas Protegidas, ou clique para escolher.', '.kmz,.kml', lerKmz, 'Escolher o KMZ de Áreas Protegidas'),
+      avisoRevisao,
+      h('p', { class: 'ajuda' }, 'É o mapa de todas as áreas protegidas do Ceará. ', h('strong', {}, 'Só precisa na primeira vez.'), ' Nada sai do seu computador.'),
+    ];
+  }
+
+  function passo2(r: Retrato): Filho[] {
+    const campo = h('input', {
+      id: 'os', type: 'text', inputmode: 'numeric', maxlength: 10, value: os, autocomplete: 'off',
+      oninput: (e) => {
+        os = (e.target as HTMLInputElement).value.trim();
+        (e.target as HTMLInputElement).classList.toggle('invalido', os !== '' && !osValida(os));
+      },
+      onchange: () => {
+        // OS que faltava ou mudou: lê o projeto de novo com ela
+        if (projetoLido && osValida(os) && os !== r.projeto?.os) void estado.carregarProjeto(projetoLido.bytes, projetoLido.nome, os);
+      },
+    });
+    return [
+      r.erroPasso === 2 && r.erro ? h('p', { class: 'erro', role: 'alert' }, r.erro) : null,
+      r.ocupado && r.trabalho ? h('p', { class: 'ajuda', role: 'status' }, r.trabalho) : null,
+      h('div', { class: 'campo' }, h('label', { for: 'os' }, 'OS'), campo),
+      r.projeto
+        ? h('div', { class: 'arquivo' },
+          h('div', {}, h('div', { class: 'nome' }, r.projeto.nome), h('div', { class: 'det' }, r.projeto.detalhe)),
+          botaoTrocar('.dxf,.dwg,.kml,.kmz', lerProjeto, 'Escolher outro projeto'))
+        : zona('Arraste aqui o DXF do projeto (ou o KML da rede), ou clique para escolher.', '.dxf,.dwg,.kml,.kmz', lerProjeto, 'Escolher o projeto'),
+      r.projeto && !r.bloqueio ? h('p', { class: 'ok' }, 'Desenho dentro do Ceará e em metros (UTM 24S).') : null,
+      h('p', { class: 'ajuda' }, 'Se o desenho estiver fora do lugar, o site para aqui e avisa, para o kit não sair deslocado. Trocar a OS lê o projeto de novo e desfaz as marcações dos vãos.'),
+    ];
+  }
+
+  function avisoDeBloqueio(r: Retrato): Filho {
+    const b = r.bloqueio;
+    if (b) {
+      return h('div', { class: 'bloco-bloqueio' },
+        blocoAviso(b),
+        b.codigo === 'ETIQUETA_LONGE' ? caixaEtiqueta(false) : null);
+    }
+    if (r.liberado) {
+      return h('div', { class: 'aviso amarelo' },
+        h('h3', {}, 'Etiquetas liberadas por você', h('span', { class: 'cod' }, 'ETIQUETA_LONGE')),
+        h('p', {}, 'As coordenadas escritas nas etiquetas não batem com o desenho, e você confirmou que o desenho está no lugar certo.'),
+        caixaEtiqueta(true));
+    }
+    return null;
+  }
+
+  function caixaEtiqueta(marcada: boolean): HTMLElement {
+    const c = h('input', { type: 'checkbox', checked: marcada, onchange: (e) => estado.liberarEtiqueta((e.target as HTMLInputElement).checked) });
+    (c as HTMLInputElement).checked = marcada;
+    return h('label', { class: 'confirma-solta' }, c, 'O desenho está no lugar certo');
+  }
+
+  function passo3(r: Retrato): Filho[] {
+    const rede = r.rede!;
+    const t = totaisDaRede(rede.vaos);
+    const linhas = rede.vaos.map((v) => {
+      const novo = v.situacao === 'novo';
+      const classe = v.tipo === null ? (novo ? 'sem' : 'fora') : novo ? v.tipo.toLowerCase() : 'fora';
+      const nome = nomeDoVao(v, rede.postes);
+      const tipoTexto = v.tipo === null ? '?' : TIPO_TEXTO[v.tipo];
+      const situacao = SITUACAO_TEXTO[v.situacao];
+      return h('tr', { class: `vao-linha${novo && v.tipo !== null ? '' : ' fora-da-conta'}${novo && v.tipo === null ? ' sem-tipo' : ''}` },
+        h('td', {}, nome),
+        h('td', {}, h('button', {
+          type: 'button', class: 'ciclo', 'data-vao': v.id,
+          'aria-label': `Vão ${nome}: ${tipoTexto}, ${situacao}. Trocar a marca.`,
+          onclick: () => estado.marcarVao(v.id),
+        }, h('span', { class: `tipo ${classe}` }, !novo ? 'Fora' : v.tipo === null ? 'Sem tipo' : tipoTexto))),
+        h('td', { class: 'sit' }, situacao),
+        h('td', { class: 'n' }, metrosTexto(comprimento(v.pts))));
+    });
+    const doCaso = (r.caso?.avisos ?? []).filter((a) => AVISOS_DA_REDE.has(a.codigo));
+    return [
+      h('p', { class: 'ajuda' }, 'O site já separou a rede pelo desenho. ', h('strong', {}, 'Só a rede nova entra na conta.'),
+        ' Rede existente, realocada e retirada ficam de fora. Clique no vão (no mapa ou na coluna Tipo) para trocar: MT, BT, conjugada, fora.'),
+      h('div', { class: 'tabela-rolagem' }, h('table', {},
+        h('thead', {}, h('tr', {}, h('th', {}, 'Vão'), h('th', {}, 'Tipo'), h('th', {}, 'Situação'), h('th', { class: 'n' }, 'm'))),
+        h('tbody', {}, ...linhas))),
+      h('table', {}, h('tfoot', {},
+        h('tr', {}, h('td', { colspan: 4 }, `Rede nova (${rede.vaos.length} vãos no total)`)),
+        h('tr', {}, h('td', { colspan: 4, class: 'sub' },
+          `MT ${metrosTexto(t.MT)} m · BT ${metrosTexto(t.BT)} m · conjugada ${metrosTexto(t.CONJ)} m`)))),
+      t.semTipo ? h('p', { class: 'amarelo-txt' }, `${t.semTipo} ${t.semTipo === 1 ? 'vão novo está' : 'vãos novos estão'} sem tipo (tracejado amarelo no mapa) e ficam fora da conta. Clique para escolher MT, BT ou conjugada.`) : null,
+      h('div', { class: 'legenda', role: 'group', 'aria-label': 'Cores no mapa' },
+        h('span', {}, h('i', { class: 'c-mt' }), 'MT (média tensão)'),
+        h('span', {}, h('i', { class: 'c-bt' }), 'BT (baixa tensão)'),
+        h('span', {}, h('i', { class: 'c-conj' }), 'Conjugada'),
+        h('span', {}, h('i', { class: 'c-ex' }), 'Existente ou fora da conta')),
+      r.camadas.length ? h('div', { class: 'camadas-extra' },
+        h('p', { class: 'ajuda' }, h('strong', {}, 'Camadas do DXF que não parecem rede.'), ' Se alguma for rede, inclua com o tipo certo.'),
+        ...r.camadas.map((c) => h('div', { class: 'linha' }, h('code', {}, c),
+          h('button', { type: 'button', class: 'botao mini', 'aria-label': `Incluir a camada ${c} como MT`, onclick: () => estado.incluirCamada(c, 'MT') }, 'MT'),
+          h('button', { type: 'button', class: 'botao mini', 'aria-label': `Incluir a camada ${c} como BT`, onclick: () => estado.incluirCamada(c, 'BT') }, 'BT')))) : null,
+      avisoDeBloqueio(r),
+      ...doCaso.map(blocoAviso),
+    ];
+  }
+
+  function passo5(r: Retrato, caso: Caso): Filho[] {
+    const outros = caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo));
+    const copiar = h('button', { type: 'button', class: 'botao', onclick: () => {
+      try { void navigator.clipboard.writeText(resumoTexto(caso, r.projeto?.os ?? '')); } catch { /* sem área de transferência */ }
+    } }, 'Copiar resumo');
+    return [
+      h('div', { class: 'resumo-topo' },
+        h('span', { class: 'pilula' }, `${caso.intervencoes.length} áreas cruzadas`),
+        h('span', { class: outros.length ? 'pilula am' : 'pilula' }, `${outros.length} avisos para conferir`)),
+      caso.municipio ? h('p', { class: 'ajuda' }, 'Município: ', h('strong', {}, caso.municipio)) : null,
+      ...caso.intervencoes.map(linhaIntervencao),
+      ...outros.map(blocoAviso),
+      copiar,
+      h('pre', { class: 'resumo-txt' }, resumoTexto(caso, r.projeto?.os ?? '')),
+    ];
+  }
+
+  function corpoDoPasso(n: number, r: Retrato): Filho[] {
+    if (n === 1) return passo1(r);
+    if (n === 2) return passo2(r);
+    if (n === 3 && r.rede) return passo3(r);
+    if (n === 5 && r.caso) return passo5(r, r.caso);
+    return [];
+  }
+
+  function legendaDoPasso(n: number, r: Retrato): string {
+    const feito = resumoDoPasso(n, r);
+    if (EM_BREVE.has(n)) return 'vem nas próximas etapas';
+    if (n === 2 && !r.base) return 'abra o KMZ primeiro';
+    if (n === 3 && !r.rede) return 'depois do projeto';
+    if (n === 5) return r.bloqueio ? 'resolva o aviso vermelho do passo 3' : !r.caso ? 'depois da rede' : (feito ?? '');
+    return feito ?? (n === 3 ? 'quais vãos são rede nova' : '');
+  }
+
+  function desenhar() {
+    const r = estado.ler();
+    const atual = passoAtual(r);
+    if (atual !== atualAnterior) { abertura.clear(); atualAnterior = atual; }
+
+    // foco e rolagem sobrevivem ao redesenho (a tabela muda a cada clique)
+    const ativo = document.activeElement as HTMLElement | null;
+    const vaoFocado = ativo?.dataset?.vao ?? null;
+    const rolagem = raiz.querySelector('.tabela-rolagem')?.scrollTop ?? 0;
+    const rolagemPainel = raiz.scrollTop;
+
+    const lista = PASSOS.map(({ n, titulo }) => {
+      const emBreve = EM_BREVE.has(n);
+      const corpo = corpoDoPasso(n, r);
+      const bloqueado = n === 5 ? !r.caso : n === 3 ? !r.rede : n === 2 ? !r.base : false;
+      const feito = (n === 1 && !!r.base) || (n === 2 && !!r.rede);
+      const aberto = !emBreve && !bloqueado && (abertura.get(n) ?? n === atual);
+      const classe = ['passo', feito ? 'feito' : '', n === atual ? 'atual' : '', bloqueado ? 'bloqueado' : '', emBreve ? 'em-breve' : ''].filter(Boolean).join(' ');
+      const sumario = h('summary', {
+        'aria-disabled': emBreve || bloqueado ? 'true' : undefined,
+        onclick: (e) => {
+          e.preventDefault();
+          if (emBreve || bloqueado) return;
+          abertura.set(n, !aberto);
+          desenhar();
+        },
+      }, h('span', { class: 'num' }, String(n)), h('span', {}, titulo, h('small', {}, legendaDoPasso(n, r))));
+      const d = h('details', { class: classe }, sumario, aberto ? h('div', { class: 'corpo' }, ...corpo) : null);
+      if (aberto) d.setAttribute('open', '');
+      return d;
+    });
+    raiz.replaceChildren(...lista);
+    raiz.scrollTop = rolagemPainel;
+    const tab = raiz.querySelector('.tabela-rolagem');
+    if (tab) tab.scrollTop = rolagem;
+    if (vaoFocado) raiz.querySelector<HTMLElement>(`[data-vao="${CSS.escape(vaoFocado)}"]`)?.focus();
+  }
+
+  estado.aoMudar(desenhar);
+  desenhar();
+  return { desenhar };
+}
+
+export interface BarraStatus { cursor(p: Pt | null): void }
+
+export function criarStatus(raiz: HTMLElement, estado: Estado): BarraStatus {
+  // o cursor muda a cada movimento do mouse: só o texto dele é trocado, o resto não é redesenhado
+  const posicao = h('span', {});
+  const escreve = (p: Pt | null) => {
+    posicao.textContent = p ? `E ${milhar(Math.round(p[0]))} · N ${milhar(Math.round(p[1]))}` : 'E · · N ·';
+  };
+  function desenhar() {
+    const r = estado.ler();
+    const t = r.rede ? totaisDaRede(r.rede.vaos) : null;
+    raiz.replaceChildren(...[
+      posicao,
+      h('span', {}, 'UTM 24S · SIRGAS 2000'),
+      t ? h('span', {}, 'Rede nova: ', h('b', {}, `MT ${metrosTexto(t.MT)} m`), ' · ', h('b', {}, `BT ${metrosTexto(t.BT)} m`), ' · ', h('b', {}, `Conj. ${metrosTexto(t.CONJ)} m`)) : null,
+      r.trabalho
+        ? h('span', { class: 'dir ocupado', role: 'status' }, r.trabalho)
+        : h('span', { class: 'dir' }, 'Nada sai do seu computador')].filter((x): x is HTMLElement => !!x));
+  }
+  escreve(null);
+  estado.aoMudar(desenhar);
+  desenhar();
+  return { cursor: escreve };
+}

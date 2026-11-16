@@ -6,5 +6,35 @@
     <meta name="robots" content="noindex" />
     <title>Kit Ambiental</title>
   </head>
-  <body></body>
+  <body>
+    <aside class="painel" aria-label="Passos do kit ambiental">
+      <header class="cabeca">
+        <h1>Kit Ambiental</h1>
+        <p>Diz se a obra precisa de processo ambiental, monta o kit e confere o zip.</p>
+      </header>
+      <div class="passos" id="passos"></div>
+    </aside>
+
+    <main class="previa" aria-label="Mapa de conferência">
+      <div class="palco" id="palco">
+        <div class="ferramentas">
+          <button type="button" class="botao" id="ajustar">Ajustar tela</button>
+        </div>
+        <div class="camadas" role="group" aria-label="Camadas do mapa">
+          <h2>No mapa</h2>
+          <span class="l"><i class="c-mt"></i>MT nova</span>
+          <span class="l"><i class="c-bt"></i>BT nova</span>
+          <span class="l"><i class="c-conj"></i>Conjugada nova</span>
+          <span class="l"><i class="c-ex"></i>Existente ou fora</span>
+          <span class="l"><i class="semtipo"></i>Vão novo sem tipo</span>
+          <span class="l"><i class="area c-area"></i>Área protegida</span>
+          <span class="l"><i class="area c-agua"></i>Água</span>
+          <span class="creditos">Estradas: OpenStreetMap (ODbL)</span>
+        </div>
+      </div>
+      <footer class="status" id="status"></footer>
+    </main>
+
+    <script type="module" src="/src/tela/main.ts"></script>
+  </body>
 </html>
