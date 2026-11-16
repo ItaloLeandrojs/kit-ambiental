@@ -3,7 +3,7 @@ import type { Aviso, Geometria, Pt } from './tipos.ts';
 import type { AreaProtegida } from './areas.ts';
 import type { CamadaKit } from './shp.ts';
 import { lerGpsJpeg } from './exif.ts';
-import { G } from './geom.ts';
+import { G, type Geo } from './geom.ts';
 import { paraUtm } from './utm.ts';
 import { haTexto } from './formato.ts';
 
@@ -85,6 +85,13 @@ export interface AreaParaCruzar { nome: string; poligonos: Pt[][][]; caixa?: [nu
 
 const NOME_INTERVENCAO: Record<IntervencaoArvore, string> = { poda: 'Poda', supressao: 'Supressão' };
 const poligonoValido = (an: Pt[][]): boolean => an.length > 0 && an[0].length >= 4;
+// o polígono do JSTS de cada área é feito uma vez só (a base não muda entre um clique e outro)
+const geos = new WeakMap<Pt[][], Geo>();
+const geoDe = (an: Pt[][]): Geo => {
+  let g = geos.get(an);
+  if (!g) { g = G.poligono(an); geos.set(an, g); }
+  return g;
+};
 
 /**
  * Aviso amarelo para cada (intervenção, área) em que um ponto de árvore, ou o polígono de limpeza de faixa,
@@ -112,7 +119,7 @@ export function avisosEmArea(as: Arvore[], limpeza: Pt[][], areas: AreaParaCruza
   for (const area of areas) {
     for (const alvo of alvos) {
       if (area.caixa && (alvo.caixa[0] > area.caixa[2] || alvo.caixa[2] < area.caixa[0] || alvo.caixa[1] > area.caixa[3] || alvo.caixa[3] < area.caixa[1])) continue;
-      if (area.poligonos.filter(poligonoValido).some((p) => G.distancia(alvo.geo, G.poligono(p)) === 0)) poe(alvo.que, area.nome);
+      if (area.poligonos.filter(poligonoValido).some((p) => G.distancia(alvo.geo, geoDe(p)) === 0)) poe(alvo.que, area.nome);
     }
   }
   return avisos;

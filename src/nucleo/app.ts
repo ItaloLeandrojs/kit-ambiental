@@ -54,7 +54,10 @@ function caixaDaRede(rede: Rede): Caixa {
 // Se o JSTS lança (água com desenho quebrado), devolve null: quem chama marca a proposta como sem desenho.
 function geometriaApp(agua: AreaProtegida, largura: number, caixa: Caixa): Pt[][][] | null {
   try {
-    const g = geoDaAgua(agua);
+    // só o pedaço da água a até `largura` do recorte importa: engrossar o açude inteiro custa segundos
+    // (dentro do recorte o resultado é o mesmo: todo ponto a menos de `largura` dele vem desse pedaço)
+    const folga = largura + 1;
+    const g = G.intersecao(geoDaAgua(agua), G.caixa(caixa[0] - folga, caixa[1] - folga, caixa[2] + folga, caixa[3] + folga));
     const grosso = G.engrossa(g, largura);
     const faixa = agua.poligonos.length ? G.diferenca(grosso, g) : grosso;
     return G.poligonos(G.intersecao(faixa, G.caixa(...caixa)));
@@ -77,15 +80,16 @@ export function proporApps(rede: Rede, base: BaseAreas): AppProposta[] {
   for (const agua of base.areas) {
     const tipo = ehAgua(agua);
     if (tipo === null || agua.defeito) continue; // água com defeito: o caso já dá o vermelho "não pôde ser conferida"
+    // caixa da água longe da caixa da rede + 100 m: não há como ficar a 100 m (pula a conta pesada)
+    const d = MARGEM_CAIXA - RAIO_PROXIMA;
+    if (agua.caixa[0] > caixa[2] - d || agua.caixa[2] < caixa[0] + d || agua.caixa[1] > caixa[3] - d || agua.caixa[3] < caixa[1] + d) continue;
     const largura = LARGURA_APP[tipo];
     let perto: boolean;
     try {
       const g = geoDaAgua(agua);
       perto = Math.min(...alvos.map((r) => G.distancia(r, g))) <= RAIO_PROXIMA;
     } catch {
-      // nem a distância deu: pela caixa da rede + 100 m, para não sumir em silêncio
-      const d = MARGEM_CAIXA - RAIO_PROXIMA;
-      perto = agua.caixa[0] <= caixa[2] - d && agua.caixa[2] >= caixa[0] + d && agua.caixa[1] <= caixa[3] - d && agua.caixa[3] >= caixa[1] + d;
+      perto = true; // nem a distância deu: a caixa já está a 100 m da rede; propõe, para não sumir em silêncio
     }
     if (!perto) continue;
     out.push(comDesenho({ agua, largura, porque: PORQUE[tipo], caixa }, geometriaApp(agua, largura, caixa)));

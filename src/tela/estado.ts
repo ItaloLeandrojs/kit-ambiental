@@ -173,10 +173,26 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   let respostas = new Map<number, { resposta: RespostaApp; largura: number }>();
   let atual: Retrato;
 
-  const emArea = (): Aviso[] =>
-    base && (arvores.length > 0 || limpeza.length > 0)
-      ? avisosEmArea(arvores, limpeza, [...base.areas, ...confirmadas()])
-      : [];
+  // Contas pesadas guardadas pela entrada: só refazem quando o que elas usam muda (desempenho, revisão final I3).
+  // `iguais` compara a chave nova com a guardada: identidade para objetos grandes, texto para o resto.
+  type Chave = unknown[];
+  const iguais = (a: Chave, b: Chave): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
+  // a rede nova pela geometria (o tipo não muda a faixa, as APPs propostas nem a posição das árvores)
+  const desenhoDaRedeNova = (): string =>
+    rede ? JSON.stringify([rede.vaos.filter(contaNaRede).map((v) => v.pts), rede.postes.filter((p) => p.novo).map((p) => p.ponto)]) : '';
+  let memoEmArea: { chave: Chave; avisos: Aviso[] } | null = null;
+  const emArea = (): Aviso[] => {
+    if (!base || (arvores.length === 0 && limpeza.length === 0)) return [];
+    // a APP confirmada vale pela água, pela largura e pelo recorte (a caixa da rede): é o que dá o polígono
+    const apps0 = apps.filter((a) => a.resposta === 'confirmada').map((a) => [a.proposta.agua.id, a.proposta.largura, ...a.proposta.caixa]);
+    const chave: Chave = [base, limpeza, JSON.stringify([arvores.map((a) => [a.ponto, a.intervencao]), apps0])];
+    if (!memoEmArea || !iguais(memoEmArea.chave, chave)) {
+      memoEmArea = { chave, avisos: avisosEmArea(arvores, limpeza, [...base.areas, ...confirmadas()]) };
+    }
+    return memoEmArea.avisos;
+  };
+  let memoFaixa: { chave: Chave; avisos: Aviso[] } | null = null;
+  let memoApps: { chave: Chave; apps: AppProposta[] } | null = null;
   const montar = (): Retrato => ({
     base, rede, bloqueio, caso, ocupado, erro, erroPasso, trabalho, kmzNome, projeto, liberado,
     camadas: dxf ? camadasCandidatas(dxf) : [],
@@ -199,7 +215,11 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   const calcularFaixa = () => {
     faixa = [];
     if (!rede || !base || bloqueio) return;
-    try { faixa = avisosFaixa(rede, malhas); } catch { falhou(); }
+    const chave: Chave = [desenhoDaRedeNova(), ...malhas];
+    try {
+      if (!memoFaixa || !iguais(memoFaixa.chave, chave)) memoFaixa = { chave, avisos: avisosFaixa(rede, malhas) };
+      faixa = memoFaixa.avisos;
+    } catch { memoFaixa = null; falhou(); }
   };
   const calcular = () => {
     caso = null;
@@ -210,7 +230,9 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   function propor() {
     apps = [];
     if (!rede || !base) return;
-    for (const p of proporApps(rede, base)) {
+    const chave: Chave = [base, desenhoDaRedeNova()];
+    if (!memoApps || !iguais(memoApps.chave, chave)) memoApps = { chave, apps: proporApps(rede, base) };
+    for (const p of memoApps.apps) {
       const antes = respostas.get(p.agua.id);
       let proposta = p;
       let resposta: RespostaApp = 'pendente';

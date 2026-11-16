@@ -81,10 +81,24 @@ function posteDaPonta(postes: Poste[], p: Pt): Poste | null {
 // área candidata ao cruzamento, com os polígonos já unidos (as áreas se distinguem por identidade, nunca por nome)
 interface Alvo { area: AreaProtegida | AreaConfirmada; geo: Geo | null; caixa: Caixa }
 
+// a união dos polígonos de cada área do KMZ é feita uma vez só (a base não muda entre um clique e outro)
+const unidas = new WeakMap<AreaProtegida, Geo | null>();
+// o polígono do JSTS de cada anel da base (municípios e águas) também
+const feitos = new WeakMap<Pt[][], Geo>();
+function poligonoDe(an: Pt[][]): Geo {
+  let g = feitos.get(an);
+  if (!g) { g = G.poligono(an); feitos.set(an, g); }
+  return g;
+}
+
 function alvoDe(a: AreaProtegida | AreaConfirmada): Alvo {
   const lista = a.poligonos.filter(aneisValidos);
   // une os polígonos da área: polígonos sobrepostos não contam o mesmo metro duas vezes
-  const geo = lista.length ? G.uniao(lista.map((an) => G.poligono(an))) : null;
+  const unir = (): Geo | null => (lista.length ? G.uniao(lista.map((an) => G.poligono(an))) : null);
+  let geo: Geo | null;
+  if (ehConfirmada(a)) geo = unir();
+  else if (unidas.has(a)) geo = unidas.get(a)!;
+  else { geo = unir(); unidas.set(a, geo); }
   const caixa: Caixa = ehConfirmada(a)
     ? caixaDePts(lista.map((an) => an[0]).flat())
     : a.caixa;
@@ -150,6 +164,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
     const pedacos: Pedaco[] = [];
     if (alvo.geo && cruza(alvo.caixa, caixaRede)) {
       for (const v of novos) {
+        if (!cruza(caixaDePts(v.pts), alvo.caixa)) continue; // vão longe da área: nem cruza
         for (const pts of G.dentro(v.pts, alvo.geo)) pedacos.push({ tipo: v.tipo as TipoRede, pts });
       }
     }
@@ -238,7 +253,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
     if (a.defeito) { naoConferiu(a); continue; }
     let longe: boolean;
     try {
-      const geos = [...a.poligonos.filter(aneisValidos).map((p) => G.poligono(p)), ...a.linhas.map((l) => G.linha(l))];
+      const geos = [...a.poligonos.filter(aneisValidos).map(poligonoDe), ...a.linhas.map((l) => G.linha(l))];
       longe = !geos.length || Math.min(...geos.map(distRede)) > RAIO_PROXIMA;
     } catch {
       naoConferiu(a);
@@ -267,7 +282,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
   }
   const pMeio = G.ponto(meio);
   const ponto: Caixa = [meio[0], meio[1], meio[0], meio[1]];
-  const poligonosDe = (m: AreaProtegida): Geo[] => m.poligonos.filter(aneisValidos).map((an) => G.poligono(an));
+  const poligonosDe = (m: AreaProtegida): Geo[] => m.poligonos.filter(aneisValidos).map(poligonoDe);
   let mun = base.municipios.find((m) => cruza(m.caixa, ponto) && poligonosDe(m).some((g) => G.contem(g, pMeio)));
   let incerto = false;
   if (!mun) {
