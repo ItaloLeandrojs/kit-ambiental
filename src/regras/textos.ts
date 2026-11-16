@@ -21,6 +21,8 @@ export const TEXTOS = {
   faixaSemMalhaSop: 'Carregue a malha SOP para conferir a faixa de domínio',
   // provisório: texto a confirmar com o Italo
   faixaFerrovia: 'precisa de processo da ferrovia',
+  // provisório: texto a confirmar com o Italo
+  faixaSemFerrovia: 'Faixa de ferrovia não conferida: carregue a malha de ferrovia',
 } as const;
 
 // "Por que importa" de cada aviso do caso, para o cartão da tela (texto provisório: a confirmar com o Italo)
@@ -43,5 +45,6 @@ export const PORQUE_AVISO: Record<string, string> = {
   ARVORE_SEM_PONTO: 'Sem posição, a árvore não entra no kit: o órgão não saberia onde ela está.',
   FAIXA_DOMINIO: 'Rede dentro da faixa de domínio de rodovia ou ferrovia exige autorização do órgão dono da via.',
   FAIXA_SEM_MALHA: 'Sem as malhas das rodovias, o site não sabe se a rede nova entra em faixa de domínio.',
+  FAIXA_SEM_FERROVIA: 'Sem a malha de ferrovia, o site não sabe se a rede nova entra na faixa de domínio de uma ferrovia.',
   SEM_AREA: 'O KMZ não cobre todos os rios, lagoas e açudes: não ter área no KMZ não prova que não há APP.',
 };

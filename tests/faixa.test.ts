@@ -128,24 +128,41 @@ describe('avisosFaixa', () => {
     expect(avisosFaixa(maior, [vertical])[0].texto).toContain('70 m de rede');
   });
 
-  it('sem nenhuma malha e com rede nova: amarelo pedindo as duas, nunca verde', () => {
+  // ferrovia longe da obra: só para não sair o amarelo da ferrovia nos testes das rodovias
+  const ferroviaLonge = (): Malha => malha('FERROVIA', 'Linha Longe', 9509000);
+
+  it('sem nenhuma malha e com rede nova: amarelo pedindo as duas e a ferrovia, nunca verde', () => {
     const r = avisosFaixaTodos(REDE, []);
-    expect(r).toHaveLength(1);
-    expect(r[0].nivel).toBe('amarelo');
+    expect(r).toHaveLength(2);
+    expect(r.every((a) => a.nivel === 'amarelo')).toBe(true);
     expect(r[0].codigo).toBe('FAIXA_SEM_MALHA');
     expect(r[0].texto).toBe('Carregue as malhas DNIT e SOP para conferir a faixa de domínio');
+    expect(r[1].codigo).toBe('FAIXA_SEM_FERROVIA');
   });
 
-  it('só a SOP carregada: amarelo da DNIT; só a DNIT: amarelo da SOP; ferrovia é opcional', () => {
+  it('só a SOP carregada: amarelo da DNIT; só a DNIT: amarelo da SOP', () => {
     const longe = (t: Malha['tipo']) => malha(t, 'X', 9509000);
-    expect(avisosFaixaTodos(REDE, [longe('SOP')]).map((a) => a.texto)).toEqual(['Carregue a malha DNIT para conferir a faixa de domínio']);
-    expect(avisosFaixaTodos(REDE, [longe('DNIT')]).map((a) => a.texto)).toEqual(['Carregue a malha SOP para conferir a faixa de domínio']);
-    expect(avisosFaixaTodos(REDE, [longe('DNIT'), longe('SOP')])).toEqual([]);
+    expect(avisosFaixaTodos(REDE, [longe('SOP'), ferroviaLonge()]).map((a) => a.texto)).toEqual(['Carregue a malha DNIT para conferir a faixa de domínio']);
+    expect(avisosFaixaTodos(REDE, [longe('DNIT'), ferroviaLonge()]).map((a) => a.texto)).toEqual(['Carregue a malha SOP para conferir a faixa de domínio']);
+    expect(avisosFaixaTodos(REDE, [longe('DNIT'), longe('SOP'), ferroviaLonge()])).toEqual([]);
+  });
+
+  it('com rede nova e sem malha de ferrovia: amarelo provisório da ferrovia, nunca silêncio', () => {
+    const longe = (t: Malha['tipo']) => malha(t, 'X', 9509000);
+    const r = avisosFaixaTodos(REDE, [longe('DNIT'), longe('SOP')]);
+    expect(r).toHaveLength(1);
+    expect(r[0].nivel).toBe('amarelo');
+    expect(r[0].codigo).toBe('FAIXA_SEM_FERROVIA');
+    expect(r[0].texto).toBe('Faixa de ferrovia não conferida: carregue a malha de ferrovia');
+    expect(r[0].comoCorrigir).toContain('passo 1');
+    // ferrovia carregada mas sem linhas conta como malha que falta
+    const vazia: Malha = { tipo: 'FERROVIA', nome: 'FERROVIA.kml', linhas: [] };
+    expect(avisosFaixaTodos(REDE, [longe('DNIT'), longe('SOP'), vazia]).map((a) => a.codigo)).toEqual(['FAIXA_SEM_FERROVIA']);
   });
 
   it('malha carregada mas sem linhas conta como malha que falta', () => {
     const vazia: Malha = { tipo: 'DNIT', nome: 'DNIT.kml', linhas: [] };
-    expect(avisosFaixaTodos(REDE, [vazia, malha('SOP', 'X', 9509000)]).map((a) => a.texto)).toEqual(['Carregue a malha DNIT para conferir a faixa de domínio']);
+    expect(avisosFaixaTodos(REDE, [vazia, malha('SOP', 'X', 9509000), ferroviaLonge()]).map((a) => a.texto)).toEqual(['Carregue a malha DNIT para conferir a faixa de domínio']);
   });
 
   it('sem rede nova não há amarelo de carregar', () => {

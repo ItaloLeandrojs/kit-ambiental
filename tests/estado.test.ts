@@ -358,17 +358,17 @@ describe('estado: conferir o zip baixado', () => {
 describe('estado: malhas de faixa de domínio', () => {
   const malha = (tipo: 'DNIT' | 'SOP' | 'FERROVIA'): import('../src/nucleo/faixa.ts').Malha => ({ tipo, nome: `${tipo}.kml`, linhas: [{ nome: 'CE-999', pts: [[499900, 9500070], [500300, 9500070]] }] });
 
-  it('sem malha, o caso traz só o amarelo de carregar; com malha perto, o aviso da rodovia', async () => {
+  it('sem malha, o caso traz só os amarelos de carregar; com malha perto, o aviso da rodovia', async () => {
     const e = criarEstado({ lerAreas: lerBase, lerMalha: async (_b, _n, t) => malha(t) });
     await e.carregarKmz(bytesDe('x'), 'a.kmz');
     expect(e.ler().avisosFaixa).toEqual([]); // sem projeto, nada a conferir
     await e.carregarProjeto(DXF_OBRA, 'obra.dxf', '0000000001');
-    expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA']);
+    expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA', 'FAIXA_SEM_FERROVIA']);
     await e.carregarMalha(bytesDe('x'), 'SOP.kml', 'SOP');
     expect(e.ler().malhas.map((m) => m.tipo)).toEqual(['SOP']);
-    expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA', 'FAIXA_DOMINIO']); // falta a DNIT
+    expect(e.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA', 'FAIXA_SEM_FERROVIA', 'FAIXA_DOMINIO']); // falta a DNIT e a ferrovia
     expect(e.ler().avisosFaixa[0].texto).toBe('Carregue a malha DNIT para conferir a faixa de domínio');
-    expect(e.ler().avisosFaixa[1].texto).toContain('CE-999');
+    expect(e.ler().avisosFaixa[2].texto).toContain('CE-999');
   });
 
   it('a malha fica no armazém e volta na próxima visita; trocar do mesmo tipo substitui', async () => {

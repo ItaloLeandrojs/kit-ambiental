@@ -92,15 +92,15 @@ const ORDEM: TipoMalha[] = ['DNIT', 'SOP', 'FERROVIA'];
 const numero = (n: number): string => String(n).replace('.', ',');
 
 /**
- * Um aviso amarelo por rodovia (ou ferrovia) cuja faixa a rede nova invade. Sem nenhuma malha
- * carregada, avisa que não deu para conferir: faixa de domínio nunca sai verde.
+ * Um aviso amarelo por rodovia (ou ferrovia) cuja faixa a rede nova invade. Malha que falta
+ * (DNIT, SOP ou ferrovia) vira amarelo dizendo que não deu para conferir: faixa de domínio nunca sai verde.
  */
 export function avisosFaixa(rede: Rede, malhas: Malha[]): Aviso[] {
   const novos = redeNova(rede).filter((v) => v.pts.length >= 2);
   if (novos.length === 0) return [];
   const avisos: Aviso[] = [];
   malhas = malhas.filter((m) => m.linhas.length > 0);
-  // DNIT e SOP são obrigatórias para conferir; a ferrovia é opcional
+  // DNIT e SOP: o texto fixo do desenho; a ferrovia tem o seu amarelo (não há arquivo dela ainda, vem dos e-mails)
   const faltam = (['DNIT', 'SOP'] as const).filter((t) => !malhas.some((m) => m.tipo === t));
   if (faltam.length > 0) {
     avisos.push({
@@ -108,6 +108,14 @@ export function avisosFaixa(rede: Rede, malhas: Malha[]): Aviso[] {
       codigo: 'FAIXA_SEM_MALHA',
       texto: faltam.length === 2 ? TEXTOS.faixaSemMalha : faltam[0] === 'DNIT' ? TEXTOS.faixaSemMalhaDnit : TEXTOS.faixaSemMalhaSop,
       comoCorrigir: `No passo 1, abra ${faltam.length === 2 ? 'as malhas do DNIT e da SOP' : `a malha ${faltam[0]}`}. Só na primeira vez: ficam guardadas neste computador.`,
+    });
+  }
+  if (!malhas.some((m) => m.tipo === 'FERROVIA')) {
+    avisos.push({
+      nivel: 'amarelo',
+      codigo: 'FAIXA_SEM_FERROVIA',
+      texto: TEXTOS.faixaSemFerrovia,
+      comoCorrigir: 'No passo 1, abra a malha de ferrovia. Sem ela, confira no Google Earth se a rede nova passa perto de uma ferrovia.',
     });
   }
   // caixa de cada vão novo: só os trechos de rodovia perto de algum vão entram na conta

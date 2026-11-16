@@ -46,14 +46,15 @@ const malhaPerto: Malha = { tipo: 'SOP', nome: 'SOP.kml', linhas: [{ nome: 'CE-9
 
 // com malha longe da obra por padrão, para os avisos da faixa não entrarem nas outras contas
 async function noCaso(malha: Malha | null = malhaLonge) {
-  const lerMalha = async (_b: Uint8Array, _n: string, tipo: TipoMalha): Promise<Malha> => ({ ...(malha ?? malhaLonge), tipo });
+  const lerMalha = async (_b: Uint8Array, _n: string, tipo: TipoMalha): Promise<Malha> => ({ ...(tipo === 'FERROVIA' ? malhaLonge : (malha ?? malhaLonge)), tipo });
   estado = criarEstado({ lerAreas: async () => BASE, lerMalha });
   criarPainel(raiz, estado, { salvar });
   await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
   if (malha) {
-    // DNIT e SOP carregadas (a DNIT com a mesma linha): não sai o amarelo de malha que falta
+    // DNIT e SOP carregadas (a DNIT com a mesma linha) e a ferrovia longe: não sai o amarelo de malha que falta
     await estado.carregarMalha(new Uint8Array([1]), 'DNIT.kml', 'DNIT');
     await estado.carregarMalha(new Uint8Array([1]), 'SOP.kml', 'SOP');
+    await estado.carregarMalha(new Uint8Array([1]), 'FERROVIA.kml', 'FERROVIA');
   }
   await estado.carregarProjeto(DXF, 'obra.dxf', '0000000001');
   botao('Rede confirmada, seguir').click();
@@ -258,11 +259,14 @@ describe('painel: avisos e documentos', () => {
 });
 
 describe('painel: faixa de domínio', () => {
-  it('sem malha carregada, o passo 5 mostra o amarelo pedindo as malhas e o resumo repete', async () => {
+  it('sem malha carregada, o passo 5 mostra os amarelos pedindo as malhas e o resumo repete', async () => {
     await noCaso(null);
-    expect(estado.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA']);
+    expect(estado.ler().avisosFaixa.map((a) => a.codigo)).toEqual(['FAIXA_SEM_MALHA', 'FAIXA_SEM_FERROVIA']);
     const codigos = [...passo(5).querySelectorAll('.cod')].map((c) => c.textContent);
     expect(codigos).toContain('FAIXA_SEM_MALHA');
+    expect(codigos).toContain('FAIXA_SEM_FERROVIA');
+    expect(passo(5).textContent).toContain('Ferrovia não conferida');
+    expect(passo(5).querySelector('.resumo-txt')!.textContent).toContain('Aviso: Faixa de ferrovia não conferida: carregue a malha de ferrovia');
     expect(passo(5).textContent).toContain('Carregue as malhas DNIT e SOP para conferir a faixa de domínio');
     expect(passo(5).querySelector('.resumo-txt')!.textContent).toContain('Aviso: Carregue as malhas DNIT e SOP');
   });
@@ -279,8 +283,9 @@ describe('painel: faixa de domínio', () => {
   it('o passo 1 mostra as três zonas de malha e, depois de lida, o arquivo com o número de linhas', async () => {
     await noCaso(malhaPerto);
     clicarPasso(1);
-    expect(passo(1).querySelectorAll('input[aria-label^="Escolher a malha"]')).toHaveLength(1); // só a Ferrovia: DNIT e SOP já lidas
+    expect(passo(1).querySelectorAll('input[aria-label^="Escolher a malha"]')).toHaveLength(0); // as três já lidas
     expect(passo(1).textContent).toContain('SOP (rodovias estaduais) · 1 linhas');
+    expect(passo(1).textContent).toContain('Ferrovia · 1 linhas');
   });
 });
 
