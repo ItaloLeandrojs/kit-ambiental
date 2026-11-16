@@ -12,7 +12,7 @@ export interface AreaProtegida {
   caixa: [number, number, number, number];
 }
 export interface BaseAreas { revisao: string; data: string; areas: AreaProtegida[]; municipios: AreaProtegida[] }
-export interface Orgao { categoria: string; esfera: string; licencia: string; gestor: string; soIcmbio?: boolean }
+export interface Orgao { categoria: string; esfera: string; licencia: string; gestor: string; soIcmbio?: boolean; aConfirmar?: string }
 
 const ERRO_NAO_E_BASE = 'Este arquivo não é o KMZ de Áreas Protegidas do Ceará.';
 const ATRIBUTOS_DE_NOME = ['nome_zona', 'nome_proje', 'NM_COMUN3', 'terrai_nome', 'NOME_UC1', 'nome', 'Nome', 'Municipio'];
@@ -123,7 +123,7 @@ export function orgaoDaArea(a: AreaProtegida): Orgao | null {
   if (regra.soIcmbio?.some((t) => nome.includes(t))) {
     return { categoria, esfera: regra.esfera, licencia: 'ICMBio', gestor: 'ICMBio', soIcmbio: true };
   }
-  return { categoria, esfera: regra.esfera, licencia: regra.licencia, gestor: regra.gestor };
+  return { categoria, esfera: regra.esfera, licencia: regra.licencia, gestor: regra.gestor, ...(regra.aConfirmar ? { aConfirmar: regra.aConfirmar } : {}) };
 }
 
 export function ehAgua(a: AreaProtegida): 'acude' | 'lagoa' | 'rio' | null {

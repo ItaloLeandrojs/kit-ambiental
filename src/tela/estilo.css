@@ -230,3 +230,18 @@ tr.sem-tipo td { background: var(--amarelo-fundo); }
 .confirma-solta { display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 12.5px; padding: 8px 0 0; }
 .soltar:focus-within { outline: 2px solid var(--amarelo); outline-offset: 2px; }
 .bloco-bloqueio { display: grid; gap: 4px; }
+
+/* APP proposta e confirmada */
+svg.mapa .app { fill: rgba(243,196,47,.10); stroke: var(--amarelo); stroke-width: 1.5px; stroke-dasharray: 6 4; pointer-events: none; }
+svg.mapa .app.confirmada { fill: rgba(243,196,47,.22); stroke-dasharray: none; }
+.aviso .acoes { margin-top: 2px; }
+.aviso .nota { color: var(--texto-3); font-size: 12px; margin: 0; }
+.aviso .erro { margin: 0; }
+.botao:disabled { opacity: .45; cursor: not-allowed; }
+.botao:disabled:hover { background: var(--superficie); }
+.botao.forte:disabled:hover { background: var(--amarelo); }
+.item p { margin: 2px 0 0; }
+.cartao .larg { display: inline-flex; align-items: center; gap: 6px; }
+.cartao .larg input { width: 64px; height: 28px; text-align: right; padding: 0 6px; font-family: var(--fonte-dado); font-size: 12px; color: var(--texto); background: var(--painel); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
+.corpo > .botao { justify-self: start; }
+.corpo > .botao.grande { justify-self: stretch; }

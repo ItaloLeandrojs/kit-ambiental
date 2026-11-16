@@ -221,3 +221,136 @@ describe('estado: armazém', () => {
     expect(e.ler().base).toBeNull();
   });
 });
+
+// ---- Tarefa 15: APP, baixar e conferir ----
+import { abrirZip } from '../src/nucleo/zip.ts';
+import { ERRO_APP_PENDENTE, ERRO_SEM_CASO } from '../src/tela/estado.ts';
+
+// açude inventado a 60 m do fim da rede (a rede vai de 500010 a 500110, no meio da UC)
+const ACUDE: AreaProtegida = {
+  id: 3, nome: 'Acude Inventado', pasta: ['Recursos Hídricos - COGERH', 'Açudes Monitorados'], atributos: {},
+  poligonos: [[retangulo(500170, 9500000, 500270, 9500100)]], linhas: [], caixa: [500170, 9500000, 500270, 9500100],
+};
+const BASE_COM_ACUDE: BaseAreas = { ...BASE, areas: [UC, ACUDE] };
+
+async function comAcude() {
+  const e = criarEstado({ lerAreas: async () => BASE_COM_ACUDE });
+  await e.carregarKmz(bytesDe('x'), 'Areas_Rev1.kmz');
+  await e.carregarProjeto(DXF_OBRA, 'obra.dxf', '0000000001');
+  return e;
+}
+const nomesNoZip = (bytes: Uint8Array) => abrirZip(bytes).map((a) => a.caminho);
+
+describe('estado: APP proposta', () => {
+  it('propõe uma APP por água e deixa baixar desligado até responder', async () => {
+    const e = await comAcude();
+    expect(e.ler().apps).toHaveLength(1);
+    expect(e.ler().apps[0].resposta).toBe('pendente');
+    expect(e.ler().appsPendentes).toBe(1);
+    expect(() => e.baixarPacote()).toThrow(ERRO_APP_PENDENTE);
+    expect(() => e.baixarGoogleEarth()).toThrow(ERRO_APP_PENDENTE);
+  });
+
+  it('recusar libera o download, sem as camadas da APP', async () => {
+    const e = await comAcude();
+    e.recusarApp(0);
+    expect(e.ler().appsPendentes).toBe(0);
+    const nomes = nomesNoZip(e.baixarPacote().bytes);
+    expect(nomes.some((n) => n.includes('APP'))).toBe(false);
+  });
+
+  it('confirmar a APP adiciona a camada APP e a REDE EM APP, e entra nos metros', async () => {
+    const e = await comAcude();
+    const semApp = e.ler().caso!.intervencoes.length;
+    e.confirmarApp(0, 100);
+    expect(e.ler().appsPendentes).toBe(0);
+    expect(e.ler().caso!.intervencoes.length).toBe(semApp + 1);
+    const { nome, bytes } = e.baixarPacote();
+    expect(nome).toBe('kit-0000000001-espacial.zip');
+    const nomes = nomesNoZip(bytes);
+    expect(nomes.some((n) => /KML\/0000000001 APP .*\.kml$/.test(n))).toBe(true);
+    expect(nomes.some((n) => /KML\/0000000001 REDE EM APP .* - POLÍGONO\.kml$/.test(n))).toBe(true);
+    expect(nomes.some((n) => /SHAPEFILE\/0000000001 APP .*\.shp$/.test(n))).toBe(true);
+    expect(nomes.some((n) => n.includes('UNIFICADO'))).toBe(true);
+  });
+
+  it('APP vazia (largura minúscula) não é aceita: fica pendente com o erro do núcleo', async () => {
+    const e = await comAcude();
+    e.confirmarApp(0, 1e-12);
+    expect(e.ler().apps[0].resposta).toBe('pendente');
+    expect(e.ler().apps[0].erro).toBe('A APP ficou vazia. Aumente a largura e tente de novo.');
+    expect(e.ler().appsPendentes).toBe(1);
+  });
+
+  it('largura inválida dá erro e não muda a resposta', async () => {
+    const e = await comAcude();
+    e.confirmarApp(0, Number.NaN);
+    expect(e.ler().apps[0].erro).toMatch(/largura/i);
+    expect(e.ler().apps[0].resposta).toBe('pendente');
+  });
+
+  it('refazer muda a largura sem responder; reabrir desfaz a resposta', async () => {
+    const e = await comAcude();
+    e.refazerApp(0, 50);
+    expect(e.ler().apps[0].proposta.largura).toBe(50);
+    expect(e.ler().apps[0].resposta).toBe('pendente');
+    e.confirmarApp(0, 50);
+    expect(e.ler().apps[0].resposta).toBe('confirmada');
+    e.reabrirApp(0);
+    expect(e.ler().apps[0].resposta).toBe('pendente');
+  });
+
+  it('marcar um vão não perde a resposta dada à APP', async () => {
+    const e = await comAcude();
+    e.confirmarApp(0, 80);
+    e.marcarVao(e.ler().rede!.vaos[0].id, { tipo: 'BT', situacao: 'novo' });
+    expect(e.ler().apps[0].resposta).toBe('confirmada');
+    expect(e.ler().apps[0].proposta.largura).toBe(80);
+  });
+
+  it('sem caso, não baixa', async () => {
+    const e = criarEstado({ lerAreas: lerBase });
+    expect(() => e.baixarPacote()).toThrow(ERRO_SEM_CASO);
+  });
+});
+
+describe('estado: m² do poste e Google Earth', () => {
+  it('poste novo sem rede nova na área usa os m² editados', async () => {
+    const e = criarEstado({ lerAreas: lerBase });
+    await e.carregarKmz(bytesDe('x'), 'a.kmz');
+    const [lon, lat] = deUtm([500100, 9500050]);
+    const kml = `<kml><Document><Placemark><name>POSTE 1</name><Point><coordinates>${lon},${lat}</coordinates></Point></Placemark></Document></kml>`;
+    await e.carregarProjeto(bytesDe(kml), '0000000001_postes.kml', '0000000001');
+    const iv = e.ler().caso!.intervencoes[0];
+    expect(iv.postesSemRede).toHaveLength(1);
+    expect(iv.hectares).toBeCloseTo(2.856 / 10000, 8);
+    e.mudarM2Poste(iv.postesSemRede[0].poste.id, 10);
+    expect(e.ler().caso!.intervencoes[0].hectares).toBeCloseTo(10 / 10000, 8);
+    e.mudarM2Poste(iv.postesSemRede[0].poste.id, -1); // valor ruim não entra
+    expect(e.ler().caso!.intervencoes[0].hectares).toBeCloseTo(10 / 10000, 8);
+  });
+
+  it('o KML do Google Earth é o unificado, com o nome da OS', async () => {
+    const e = await comProjeto();
+    const g = e.baixarGoogleEarth();
+    expect(g.nome).toBe('0000000001 UNIFICADO.kml');
+    expect(g.texto).toContain('<kml');
+    expect(g.texto).toContain('<LineString>');
+  });
+});
+
+describe('estado: conferir o zip baixado', () => {
+  it('o próprio zip do site não tem vermelho de NO_LUGAR, PAR, TIPO nem COMPRIMENTO', async () => {
+    const e = await comAcude();
+    e.confirmarApp(0, 100);
+    const itens = e.conferir(e.baixarPacote().bytes, DXF_OBRA);
+    const ruins = itens.filter((i) => i.nivel === 'vermelho' && ['NO_LUGAR', 'PAR', 'TIPO', 'COMPRIMENTO'].includes(i.codigo));
+    expect(ruins).toEqual([]);
+    expect(itens.length).toBeGreaterThan(0);
+  });
+
+  it('um arquivo que não é zip dá vermelho', async () => {
+    const e = criarEstado();
+    expect(e.conferir(bytesDe('isto não é zip'))[0].nivel).toBe('vermelho');
+  });
+});

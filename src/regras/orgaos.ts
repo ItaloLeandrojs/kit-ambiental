@@ -9,6 +9,7 @@ export interface RegraOrgao {
   gestor: string;
   grupoUc?: boolean; // a categoria leva o grupo da subpasta (Uso Sustentável ou Proteção Integral)
   soIcmbio?: string[]; // se o nome da área tem um destes trechos: licencia e gestor são só o ICMBio
+  aConfirmar?: string; // o que ainda está a confirmar com o P&M nesta regra (a tela mostra a nota)
 }
 
 export const REGRAS_ORGAOS: RegraOrgao[] = [
@@ -36,6 +37,6 @@ export const REGRAS_ORGAOS: RegraOrgao[] = [
   { trecho: 'TERRAS INDIGENAS', categoria: 'Terra indígena', esfera: 'federal', licencia: 'SEMACE', gestor: 'FUNAI' },
   { trecho: 'IPHAN', categoria: 'Patrimônio', esfera: 'federal', licencia: 'SEMACE', gestor: 'IPHAN' },
   // licenciador municipal, como nas Planilhas Padrão dos kits aprovados (a confirmar)
-  { trecho: 'DNOCS', categoria: 'Perímetro DNOCS', esfera: 'federal', licencia: 'Município', gestor: 'DNOCS' },
+  { trecho: 'DNOCS', categoria: 'Perímetro DNOCS', esfera: 'federal', licencia: 'Município', gestor: 'DNOCS', aConfirmar: 'Município' },
   { trecho: 'MACROZONEAMENTO', categoria: 'Macrozona de Fortaleza', esfera: 'municipal', licencia: 'SEUMA', gestor: 'SEUMA' },
 ];

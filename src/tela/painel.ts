@@ -1,10 +1,14 @@
 // Painel de passos. Fica aberto só o passo atual; os passos feitos viram uma linha de resumo,
-// e clicar no resumo reabre o passo. Os passos 4, 6 e 7 vêm nas próximas tarefas.
+// e clicar no resumo reabre o passo. O passo 4 (árvores) vem na próxima tarefa.
 import type { Aviso, Poste, Pt, TipoRede, Vao } from '../nucleo/tipos.ts';
 import type { Caso, Intervencao } from '../nucleo/caso.ts';
-import { haTexto, metrosTexto } from '../nucleo/formato.ts';
+import { ehAgua } from '../nucleo/areas.ts';
+import type { ItemConferencia } from '../nucleo/conferir.ts';
+import { coordTexto, haTexto, metrosTexto } from '../nucleo/formato.ts';
 import { resumoTexto } from '../nucleo/resumo.ts';
-import { contaNaRede, osValida, type Estado, type Retrato } from './estado.ts';
+import { LARGURA_APP, M2_POSTE_SEM_REDE } from '../regras/faixas.ts';
+import { PORQUE_AVISO } from '../regras/textos.ts';
+import { contaNaRede, ERRO_APP_PENDENTE, osValida, type AppDoCaso, type Estado, type Retrato } from './estado.ts';
 import { SITUACAO_TEXTO, TIPO_TEXTO } from './mapa.ts';
 
 type Filho = Node | string | null | false | undefined;
@@ -33,8 +37,9 @@ const PASSOS = [
   { n: 6, titulo: 'Baixar' },
   { n: 7, titulo: 'Conferir um zip' },
 ] as const;
-const EM_BREVE = new Set([4, 6, 7]);
+const EM_BREVE = new Set([4]);
 const AVISOS_DA_REDE = new Set(['POSTE_A_CONFIRMAR', 'SEM_REDE_NOVA']); // aparecem no passo 3, não no 5
+const ERRO_M2_TELA = 'Os m² do poste precisam ser um número, zero ou maior.';
 const PRAZO_POSTE = 5; // m: poste que dá nome à ponta do vão
 
 const milhar = (n: number): string => n.toLocaleString('pt-BR');
@@ -96,35 +101,98 @@ function botaoTrocar(accept: string, aoEscolher: (f: File) => void, rotulo: stri
   return h('span', {}, h('button', { type: 'button', class: 'link', onclick: () => entrada.click() }, 'trocar'), entrada);
 }
 
-function blocoAviso(a: Aviso): HTMLElement {
-  return h('div', { class: `aviso ${a.nivel}`, role: a.nivel === 'vermelho' ? 'alert' : undefined },
-    h('h3', {}, a.nivel === 'vermelho' ? 'Pare e confira' : 'Confira', h('span', { class: 'cod' }, a.codigo)),
-    h('dl', {},
-      h('dt', {}, 'O que é'), h('dd', {}, a.texto),
-      h('dt', {}, 'O que fazer'), h('dd', {}, a.comoCorrigir)));
+const TITULO_AVISO: Record<string, string> = {
+  CRUZA_LINHA: 'Área só em linha',
+  MUNICIPIO_INCERTO: 'Município incerto',
+  POSTE_A_CONFIRMAR: 'Poste a confirmar',
+  SEM_REDE_NOVA: 'Nenhuma rede nova marcada',
+  APP_POSSIVEL: 'Possível APP',
+  PROXIMA: 'Perto, sem cruzar',
+  LITORAL: 'Município do litoral',
+  SEM_ORGAO: 'Órgão não identificado',
+  SEM_AREA: 'Sem área protegida no KMZ',
+};
+
+function linhasDoAviso(a: Aviso, porque?: string): Filho[] {
+  const pq = porque ?? PORQUE_AVISO[a.codigo];
+  return [
+    h('dt', {}, 'O que é'), h('dd', {}, a.texto),
+    pq ? h('dt', {}, 'Por que importa') : null, pq ? h('dd', {}, pq) : null,
+    h('dt', {}, 'O que fazer'), h('dd', {}, a.comoCorrigir),
+  ];
 }
 
-function linhaIntervencao(iv: Intervencao): HTMLElement {
+function blocoAviso(a: Aviso): HTMLElement {
+  const titulo = a.nivel === 'vermelho' ? 'Pare e confira' : (TITULO_AVISO[a.codigo] ?? 'Confira');
+  return h('div', { class: `aviso ${a.nivel}`, role: a.nivel === 'vermelho' ? 'alert' : undefined },
+    h('h3', {}, titulo, h('span', { class: 'cod' }, a.codigo)),
+    h('dl', {}, ...linhasDoAviso(a)));
+}
+
+const nomeDoPoste = (p: Poste | null, ponta: Pt): string => (p?.numero ? `P-${p.numero}` : `o ponto ${coordTexto(ponta)}`);
+const entreTexto = (iv: Intervencao): string =>
+  iv.trechos.map((t) => `entre ${nomeDoPoste(t.de, t.pts[0])} e ${nomeDoPoste(t.ate, t.pts[t.pts.length - 1])}`).join(' e ');
+const m2Texto = (m2: number): string => String(m2).replace('.', ',');
+
+function linhaIntervencao(iv: Intervencao, aoMudarM2: (id: string, texto: string) => void): HTMLElement {
   const m = iv.metros;
-  return h('article', { class: iv.orgao ? 'cartao' : 'cartao atencao' },
+  const o = iv.orgao;
+  const entre = entreTexto(iv);
+  return h('article', { class: o && !o.aConfirmar ? 'cartao' : 'cartao atencao' },
     h('h3', {}, iv.area.nome),
-    iv.orgao
+    o ? h('div', { class: 'tipo-area' }, `${o.categoria} (${o.esfera})`) : null,
+    o
       ? h('div', { class: 'orgaos' },
-        h('span', {}, 'Protocolar em: ', h('b', {}, iv.orgao.licencia)),
-        h('span', {}, 'Anuência (autorização do gestor): ', h('b', {}, iv.orgao.gestor)))
+        h('span', {}, 'Protocolar em: ', h('b', {}, o.licencia), ' · Anuência: ', h('b', {}, o.gestor)),
+        o.aConfirmar ? h('span', { class: 'nota' }, `Quem licencia aqui ainda está a confirmar (${o.aConfirmar} a confirmar). Pergunte ao P&M antes de protocolar.`) : null)
       : h('p', { class: 'nota' }, 'Órgão não identificado; consultar o P&M.'),
     h('div', { class: 'nums' },
       h('div', {}, h('b', {}, `${metrosTexto(m.MT)} m`), h('span', {}, 'MT')),
       h('div', {}, h('b', {}, `${metrosTexto(m.BT)} m`), h('span', {}, 'BT')),
       h('div', {}, h('b', {}, `${metrosTexto(m.CONJ)} m`), h('span', {}, 'conjugada'))),
-    h('div', { class: 'ha' }, 'Área de intervenção: ', h('b', {}, `${haTexto(iv.hectares)} ha`)));
+    h('div', { class: 'ha' }, 'Área de intervenção: ', h('b', {}, `${haTexto(iv.hectares)} ha`),
+      ' ', h('span', { class: 'nota' }, '(metros × faixa de 6 m na MT e na conjugada e 3 m na BT)')),
+    entre ? h('div', { class: 'entre' }, `Trechos ${entre}.`) : null,
+    ...iv.postesSemRede.map(({ poste, m2 }) => h('div', { class: 'ha' },
+      `Poste novo ${poste.numero ? `P-${poste.numero} ` : ''}sem rede nova na área: `,
+      h('label', { class: 'larg' }, h('input', {
+        type: 'text', inputmode: 'decimal', value: m2Texto(m2), 'aria-label': `m² do poste ${poste.numero ?? poste.id}`,
+        onchange: (e) => aoMudarM2(poste.id, (e.target as HTMLInputElement).value),
+      }), ' m²'))),
+    h('p', { class: 'nota' }, 'Use o nome exatamente assim no memorial.'));
 }
 
 export interface Painel { desenhar(): void }
 
-export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
+export interface OpcoesPainel {
+  /** Entrega um arquivo ao usuário; nos testes é trocada por um espião. */
+  salvar?: (nome: string, conteudo: Uint8Array | string, tipo: string) => void;
+}
+
+function salvarNoNavegador(nome: string, conteudo: Uint8Array | string, tipo: string): void {
+  const url = URL.createObjectURL(new Blob([conteudo as BlobPart], { type: tipo }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nome;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPainel = {}): Painel {
+  const salvar = opcoes.salvar ?? salvarNoNavegador;
   let os = '';
   let atualAnterior = 0;
+  let avanco = 0; // 5 ou 6: a pessoa já seguiu do passo 3 para o caso (ou para o download)
+  const larguras = new Map<number, string>(); // o que está escrito no campo de largura de cada APP
+  let erroM2: string | null = null;
+  let erroBaixar: string | null = null;
+  let copia: 'nao' | 'copiado' | 'falhou' = 'nao';
+  let conferencia: { arquivo: string; itens: ItemConferencia[] } | null = null;
+  let erroConferir: string | null = null;
+  let zipLido: { bytes: Uint8Array; nome: string } | null = null;
+  let dxfConferir: Uint8Array | null = null;
   const abertura = new Map<number, boolean>(); // o que a pessoa abriu ou fechou à mão
   let projetoLido: { bytes: Uint8Array; nome: string } | null = null;
 
@@ -138,7 +206,8 @@ export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
   function passoAtual(r: Retrato): number {
     if (!r.base) return 1;
     if (!r.rede) return 2;
-    return 3;
+    if (!r.caso) return 3;
+    return avanco >= 5 ? avanco : 3;
   }
 
   function resumoDoPasso(n: number, r: Retrato): string | null {
@@ -152,6 +221,12 @@ export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
       return `${novos} de ${r.rede.vaos.length} vãos são rede nova`;
     }
     if (n === 5 && r.caso) return `${r.caso.intervencoes.length} áreas cruzadas · ${r.caso.avisos.length} avisos`;
+    if (n === 6 && r.caso) return r.appsPendentes > 0 ? 'responda as APPs antes' : 'KML e SHP prontos';
+    if (n === 7 && conferencia) {
+      const v = conferencia.itens.filter((i) => i.nivel === 'vermelho').length;
+      const a = conferencia.itens.filter((i) => i.nivel === 'amarelo').length;
+      return `${v} vermelhos · ${a} amarelos`;
+    }
     return null;
   }
 
@@ -266,23 +341,154 @@ export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
           h('button', { type: 'button', class: 'botao mini', 'aria-label': `Incluir a camada ${c} como BT`, onclick: () => estado.incluirCamada(c, 'BT') }, 'BT')))) : null,
       avisoDeBloqueio(r),
       ...doCaso.map(blocoAviso),
+      h('button', {
+        type: 'button', class: 'botao forte', disabled: !r.caso,
+        onclick: () => { avanco = 5; desenhar(); },
+      }, 'Rede confirmada, ver o caso'),
     ];
   }
 
+  function cartaoApp(a: AppDoCaso, i: number): HTMLElement {
+    const nome = a.proposta.agua.nome;
+    if (a.resposta === 'confirmada') {
+      return h('article', { class: 'cartao' },
+        h('h3', {}, `APP confirmada: ${nome}`),
+        h('p', { class: 'nota' }, `Largura de ${m2Texto(a.proposta.largura)} m. Entrou na conta (metros e hectares) e nas camadas do kit. Confira em campo.`),
+        h('button', { type: 'button', class: 'botao mini', onclick: () => estado.reabrirApp(i) }, 'Desfazer'));
+    }
+    if (a.resposta === 'recusada') {
+      return h('article', { class: 'cartao atencao' },
+        h('h3', {}, `Sem APP: ${nome}`),
+        h('p', { class: 'nota' }, 'Você disse que a margem não é APP. A margem não entra na conta nem no kit.'),
+        h('button', { type: 'button', class: 'botao mini', onclick: () => estado.reabrirApp(i) }, 'Voltar atrás'));
+    }
+    const tipo = ehAgua(a.proposta.agua);
+    const padrao = tipo ? LARGURA_APP[tipo] : null;
+    const escrito = larguras.get(a.proposta.agua.id) ?? m2Texto(a.proposta.largura);
+    const campo = h('input', {
+      type: 'text', inputmode: 'decimal', value: escrito, 'aria-label': `Largura da APP de ${nome} em metros`,
+      oninput: (e) => { larguras.set(a.proposta.agua.id, (e.target as HTMLInputElement).value); },
+    });
+    const largura = (): number => Number((campo.value || '').replace(',', '.'));
+    return h('div', { class: 'aviso amarelo' },
+      h('h3', {}, 'Possível APP', h('span', { class: 'cod' }, 'APP_POSSIVEL')),
+      h('dl', {},
+        h('dt', {}, 'O que é'), h('dd', {}, `Rede nova a menos de 100 m de ${nome}. APP é a margem protegida em volta da água.`),
+        h('dt', {}, 'Por que importa'), h('dd', {}, a.proposta.porque),
+        h('dt', {}, 'O que fazer'), h('dd', {}, `Veja a APP proposta (tracejado amarelo no mapa). Confirme a largura de ${m2Texto(a.proposta.largura)} m ou ajuste, e confira em campo.`)),
+      padrao !== null ? h('p', { class: 'nota' }, `Largura padrão de ${padrao} m: a confirmar com o P&M.`) : null,
+      a.erro ? h('p', { class: 'erro', role: 'alert' }, a.erro) : null,
+      h('div', { class: 'acoes' },
+        h('button', { type: 'button', class: 'botao mini forte', onclick: () => estado.confirmarApp(i, largura()) }, 'Confirmar APP'),
+        h('label', { class: 'larg' }, 'Largura ', campo, ' m'),
+        h('button', { type: 'button', class: 'botao mini', onclick: () => estado.refazerApp(i, largura()) }, 'Ver no mapa'),
+        h('button', { type: 'button', class: 'botao mini', onclick: () => estado.recusarApp(i) }, 'Não é APP')));
+  }
+
+  async function copiarResumo(texto: string) {
+    try {
+      await navigator.clipboard.writeText(texto);
+      copia = 'copiado';
+    } catch {
+      copia = 'falhou'; // sem permissão: o texto fica selecionado para Ctrl+C
+    }
+    desenhar();
+  }
+
   function passo5(r: Retrato, caso: Caso): Filho[] {
-    const outros = caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo));
-    const copiar = h('button', { type: 'button', class: 'botao', onclick: () => {
-      try { void navigator.clipboard.writeText(resumoTexto(caso, r.projeto?.os ?? '')); } catch { /* sem área de transferência */ }
-    } }, 'Copiar resumo');
+    const temApp = r.apps.length >= caso.avisos.filter((a) => a.codigo === 'APP_POSSIVEL').length;
+    // o cartão de APP faz o papel do aviso APP_POSSIVEL (com a confirmação ao lado)
+    const outros = caso.avisos.filter((a) => !AVISOS_DA_REDE.has(a.codigo) && !(temApp && a.codigo === 'APP_POSSIVEL'));
+    const texto = resumoTexto(caso, r.projeto?.os ?? '');
+    const paraConferir = outros.length + r.appsPendentes;
     return [
       h('div', { class: 'resumo-topo' },
         h('span', { class: 'pilula' }, `${caso.intervencoes.length} áreas cruzadas`),
-        h('span', { class: outros.length ? 'pilula am' : 'pilula' }, `${outros.length} avisos para conferir`)),
+        h('span', { class: paraConferir ? 'pilula am' : 'pilula' }, `${paraConferir} avisos para conferir`)),
       caso.municipio ? h('p', { class: 'ajuda' }, 'Município: ', h('strong', {}, caso.municipio)) : null,
-      ...caso.intervencoes.map(linhaIntervencao),
+      erroM2 ? h('p', { class: 'erro', role: 'alert' }, erroM2) : null,
+      ...caso.intervencoes.map((iv) => linhaIntervencao(iv, (id, t) => {
+        const n = Number(t.trim().replace(',', '.'));
+        if (t.trim() === '' || !Number.isFinite(n) || n < 0) { erroM2 = ERRO_M2_TELA; desenhar(); return; }
+        erroM2 = null;
+        estado.mudarM2Poste(id, n);
+      })),
+      ...r.apps.map(cartaoApp),
       ...outros.map(blocoAviso),
-      copiar,
-      h('pre', { class: 'resumo-txt' }, resumoTexto(caso, r.projeto?.os ?? '')),
+      h('button', { type: 'button', class: 'botao', onclick: () => void copiarResumo(texto) }, 'Copiar resumo'),
+      copia === 'copiado' ? h('p', { class: 'ok', role: 'status' }, 'Resumo copiado.') : null,
+      copia === 'falhou' ? h('p', { class: 'amarelo-txt', role: 'status' }, 'Não consegui copiar sozinho. O texto abaixo está selecionado: use Ctrl+C.') : null,
+      h('pre', { class: 'resumo-txt' }, texto),
+      h('button', { type: 'button', class: 'botao forte', onclick: () => { avanco = 6; desenhar(); } }, 'Seguir para baixar'),
+    ];
+  }
+
+  function baixar(fazer: () => void) {
+    erroBaixar = null;
+    try { fazer(); } catch (e) { erroBaixar = e instanceof Error ? e.message : String(e); }
+    desenhar();
+  }
+
+  function passo6(r: Retrato): Filho[] {
+    const travado = r.appsPendentes > 0;
+    return [
+      travado ? h('p', { class: 'amarelo-txt', role: 'status' }, ERRO_APP_PENDENTE) : null,
+      erroBaixar ? h('p', { class: 'erro', role: 'alert' }, erroBaixar) : null,
+      h('button', {
+        type: 'button', class: 'botao forte grande', disabled: travado,
+        onclick: () => baixar(() => { const k = estado.baixarPacote(); salvar(k.nome, k.bytes, 'application/zip'); }),
+      }, 'Baixar KML e SHP'),
+      h('p', { class: 'ajuda' }, 'Um zip com duas pastas: ', h('code', {}, 'KML/'), ' e ', h('code', {}, 'SHAPEFILE/'),
+        ', cada uma com as camadas separadas e a unificada, com o nome da OS.'),
+      h('button', {
+        type: 'button', class: 'botao', disabled: travado,
+        onclick: () => baixar(() => { const g = estado.baixarGoogleEarth(); salvar(g.nome, g.texto, 'application/vnd.google-earth.kml+xml'); }),
+      }, 'Abrir no Google Earth'),
+      h('p', { class: 'ajuda' }, 'Baixa o KML para você ver a rede em cima da imagem de satélite. O site não mostra satélite.'),
+    ];
+  }
+
+  function rodarConferencia() {
+    if (!zipLido) return;
+    erroConferir = null;
+    try {
+      conferencia = { arquivo: zipLido.nome, itens: estado.conferir(zipLido.bytes, dxfConferir ?? undefined) };
+    } catch (e) {
+      conferencia = null;
+      erroConferir = e instanceof Error ? e.message : String(e);
+    }
+    desenhar();
+  }
+
+  function itemConferencia(i: ItemConferencia): HTMLElement {
+    return h('div', { class: `item ${i.nivel}` },
+      h('span', { class: 'b' }),
+      h('div', {},
+        h('strong', {}, i.titulo),
+        h('p', {}, i.porque),
+        i.arquivos.length ? h('p', {}, ...i.arquivos.flatMap((a, k) => [k ? ', ' : '', h('code', {}, a)])) : null,
+        i.nivel === 'verde' ? null : h('p', { class: 'como' }, `Como corrigir: ${i.comoCorrigir}`)));
+  }
+
+  function passo7(): Filho[] {
+    const lerZip = (f: File) => void lerBytes(f).then((bytes) => { zipLido = { bytes, nome: f.name }; rodarConferencia(); });
+    const lerDxf = (f: File) => void lerBytes(f).then((bytes) => { dxfConferir = bytes; rodarConferencia(); });
+    const itens = conferencia?.itens ?? [];
+    const v = itens.filter((i) => i.nivel === 'vermelho').length;
+    const a = itens.filter((i) => i.nivel === 'amarelo').length;
+    return [
+      erroConferir ? h('p', { class: 'erro', role: 'alert' }, erroConferir) : null,
+      conferencia
+        ? h('div', { class: 'arquivo' },
+          h('div', {}, h('div', { class: 'nome' }, conferencia.arquivo),
+            h('div', { class: 'det' }, `${v} vermelhos · ${a} amarelos · ${itens.length - v - a} verdes`)),
+          botaoTrocar('.zip', lerZip, 'Escolher outro zip do kit'))
+        : zona('Arraste aqui o zip do kit montado. Ele não sai do seu computador.', '.zip', lerZip, 'Escolher o zip do kit'),
+      h('div', { class: 'arquivo' },
+        h('div', {}, h('div', { class: 'nome' }, 'DXF do projeto (opcional)'),
+          h('div', { class: 'det' }, dxfConferir ? 'lido: os metros do zip são comparados com o desenho' : 'se você soltar o DXF, o site compara os metros')),
+        botaoTrocar('.dxf', lerDxf, 'Escolher o DXF do projeto')),
+      ...itens.map(itemConferencia),
     ];
   }
 
@@ -291,6 +497,8 @@ export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
     if (n === 2) return passo2(r);
     if (n === 3 && r.rede) return passo3(r);
     if (n === 5 && r.caso) return passo5(r, r.caso);
+    if (n === 6 && r.caso) return passo6(r);
+    if (n === 7) return passo7();
     return [];
   }
 
@@ -300,12 +508,15 @@ export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
     if (n === 2 && !r.base) return 'abra o KMZ primeiro';
     if (n === 3 && !r.rede) return 'depois do projeto';
     if (n === 5) return r.bloqueio ? 'resolva o aviso vermelho do passo 3' : !r.caso ? 'depois da rede' : (feito ?? '');
+    if (n === 6) return !r.caso ? 'depois do caso' : (feito ?? '');
+    if (n === 7) return feito ?? 'antes de mandar ao órgão';
     return feito ?? (n === 3 ? 'quais vãos são rede nova' : '');
   }
 
   function desenhar() {
     const r = estado.ler();
     const atual = passoAtual(r);
+    if (atual < 3) avanco = 0;
     if (atual !== atualAnterior) { abertura.clear(); atualAnterior = atual; }
 
     // foco e rolagem sobrevivem ao redesenho (a tabela muda a cada clique)
@@ -317,8 +528,8 @@ export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
     const lista = PASSOS.map(({ n, titulo }) => {
       const emBreve = EM_BREVE.has(n);
       const corpo = corpoDoPasso(n, r);
-      const bloqueado = n === 5 ? !r.caso : n === 3 ? !r.rede : n === 2 ? !r.base : false;
-      const feito = (n === 1 && !!r.base) || (n === 2 && !!r.rede);
+      const bloqueado = n === 5 || n === 6 ? !r.caso : n === 3 ? !r.rede : n === 2 ? !r.base : false;
+      const feito = (n === 1 && !!r.base) || (n === 2 && !!r.rede) || (n === 3 && atual > 3) || (n === 5 && atual > 5) || (n === 7 && !!conferencia);
       const aberto = !emBreve && !bloqueado && (abertura.get(n) ?? n === atual);
       const classe = ['passo', feito ? 'feito' : '', n === atual ? 'atual' : '', bloqueado ? 'bloqueado' : '', emBreve ? 'em-breve' : ''].filter(Boolean).join(' ');
       const sumario = h('summary', {
@@ -339,6 +550,18 @@ export function criarPainel(raiz: HTMLElement, estado: Estado): Painel {
     const tab = raiz.querySelector('.tabela-rolagem');
     if (tab) tab.scrollTop = rolagem;
     if (vaoFocado) raiz.querySelector<HTMLElement>(`[data-vao="${CSS.escape(vaoFocado)}"]`)?.focus();
+    if (copia === 'falhou') {
+      // sem área de transferência: deixa o resumo selecionado para Ctrl+C
+      const pre = raiz.querySelector('.resumo-txt');
+      if (pre) {
+        const faixa = document.createRange();
+        faixa.selectNodeContents(pre);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(faixa);
+      }
+      copia = 'nao'; // o aviso vale só para este desenho
+    }
   }
 
   estado.aoMudar(desenhar);

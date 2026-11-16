@@ -1,7 +1,12 @@
 // Estado da tela: liga o núcleo aos passos 1 a 3 (KMZ, projeto e confirmação da rede).
 // Não sabe de DOM nem de worker: quem monta a tela passa o leitor do KMZ e o armazém.
 import { lerAreasProtegidas, type BaseAreas } from '../nucleo/areas.ts';
-import { calcularCaso, type Caso } from '../nucleo/caso.ts';
+import { proporApps, refazerApp as refazerAppNoNucleo, confirmarApp as confirmarAppNoNucleo, type AppProposta } from '../nucleo/app.ts';
+import { montarCamadas, unificar } from '../nucleo/camadas.ts';
+import { calcularCaso, type AreaConfirmada, type Caso } from '../nucleo/caso.ts';
+import { conferirZip, type ItemConferencia } from '../nucleo/conferir.ts';
+import { gravarKml } from '../nucleo/kml-saida.ts';
+import { montarPacote } from '../nucleo/pacote.ts';
 import { lerDxfGeometria, type DxfGeo } from '../nucleo/dxf.ts';
 import { lerKml } from '../nucleo/kml.ts';
 import { conferirEtiquetas, conferirLocal } from '../nucleo/local.ts';
@@ -9,6 +14,10 @@ import { incluirCamada as incluirCamadaNoNucleo, camadasCandidatas, marcarVao as
 import type { Aviso, Rede, Situacao, TipoRede, Vao } from '../nucleo/tipos.ts';
 
 export interface Projeto { nome: string; os: string; detalhe: string }
+
+export type RespostaApp = 'pendente' | 'confirmada' | 'recusada';
+/** Uma APP proposta em volta de uma água, com a resposta do projetista. */
+export interface AppDoCaso { proposta: AppProposta; resposta: RespostaApp; erro: string | null }
 
 export interface Retrato {
   base: BaseAreas | null;
@@ -23,6 +32,9 @@ export interface Retrato {
   projeto: Projeto | null;
   liberado: boolean; // a caixa "o desenho está no lugar certo" (só ETIQUETA_LONGE)
   camadas: string[]; // camadas do DXF com linhas que não são de rede
+  apps: AppDoCaso[]; // uma por água a até 100 m da rede nova
+  appsPendentes: number; // quantas ainda não foram confirmadas nem recusadas
+  m2Postes: Record<string, number>; // m² editados por poste novo sem rede nova na área
 }
 
 export interface Armazem {
@@ -42,12 +54,27 @@ export interface Estado {
   /** Sem `mudanca`, passa para a próxima marca do ciclo (MT novo, BT novo, conjugada nova, fora). */
   marcarVao(id: string, mudanca?: { tipo?: TipoRede | null; situacao?: Situacao }): void;
   incluirCamada(camada: string, tipo: TipoRede): void;
+  /** Aceita a APP `i` com essa largura (em metros). Se a APP ficar vazia, a resposta fica pendente e `erro` diz por quê. */
+  confirmarApp(i: number, largura: number): void;
+  recusarApp(i: number): void;
+  /** Desfaz a resposta e volta a APP para pendente. */
+  reabrirApp(i: number): void;
+  /** Só redesenha a APP `i` com outra largura, sem responder (para ver no mapa). */
+  refazerApp(i: number, largura: number): void;
+  mudarM2Poste(id: string, m2: number): void;
+  baixarPacote(): { nome: string; bytes: Uint8Array };
+  /** O KML unificado, para abrir no Google Earth. */
+  baixarGoogleEarth(): { nome: string; texto: string };
+  conferir(bytes: Uint8Array, dxf?: Uint8Array): ItemConferencia[];
   liberarEtiqueta(sim: boolean): void;
   ler(): Retrato;
   aoMudar(f: () => void): () => void;
 }
 
 export const ERRO_OS = 'A OS tem 10 dígitos, com os zeros da frente.';
+export const ERRO_APP_PENDENTE = 'Responda as APPs propostas antes de baixar';
+export const ERRO_SEM_CASO = 'Falta o caso: abra o KMZ e o projeto, e resolva os avisos vermelhos.';
+export const ERRO_LARGURA = 'A largura da APP precisa ser um número maior que zero, em metros.';
 export const ERRO_SEM_KMZ = 'Abra primeiro o KMZ de Áreas Protegidas (passo 1).';
 const CHAVE_BASE = 'base';
 
@@ -84,20 +111,51 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   let trabalho: string | null = null;
   let bloqueio: Aviso | null = null;
   let caso: Caso | null = null;
+  let apps: AppDoCaso[] = [];
+  let m2Postes: Record<string, number> = {};
+  // respostas dadas, por id da água: sobrevivem a marcar um vão (que propõe as APPs de novo)
+  let respostas = new Map<number, { resposta: RespostaApp; largura: number }>();
   let atual: Retrato;
 
   const montar = (): Retrato => ({
     base, rede, bloqueio, caso, ocupado, erro, erroPasso, trabalho, kmzNome, projeto, liberado,
     camadas: dxf ? camadasCandidatas(dxf) : [],
+    apps, appsPendentes: apps.filter((a) => a.resposta === 'pendente').length, m2Postes,
   });
   const avisar = () => {
     atual = montar();
     for (const f of [...ouvintes]) f();
   };
 
+  const confirmadas = (): AreaConfirmada[] =>
+    apps.filter((a) => a.resposta === 'confirmada').map((a) => confirmarAppNoNucleo(a.proposta));
+  const calcular = () => {
+    caso = rede && base && !bloqueio ? calcularCaso(rede, base, confirmadas(), m2Postes) : null;
+  };
+  // propõe as APPs de novo e devolve as respostas que ainda valem
+  function propor() {
+    apps = [];
+    if (!rede || !base) return;
+    for (const p of proporApps(rede, base)) {
+      const antes = respostas.get(p.agua.id);
+      let proposta = p;
+      let resposta: RespostaApp = 'pendente';
+      if (antes) {
+        proposta = antes.largura === p.largura ? p : refazerAppNoNucleo(p, antes.largura);
+        resposta = antes.resposta;
+        if (resposta === 'confirmada') {
+          try { confirmarAppNoNucleo(proposta); } catch { resposta = 'pendente'; }
+        }
+      }
+      apps.push({ proposta, resposta, erro: null });
+    }
+  }
+  const guardarResposta = (a: AppDoCaso) => respostas.set(a.proposta.agua.id, { resposta: a.resposta, largura: a.proposta.largura });
+
   function recalcular() {
     bloqueio = null;
     caso = null;
+    apps = [];
     if (!rede || !base) return;
     const local = conferirLocal(rede, base.municipios);
     const etiqueta = conferirEtiquetas(rede).aviso;
@@ -106,7 +164,13 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     let b: Aviso | null = local ?? etiqueta;
     if (b?.codigo === 'ETIQUETA_LONGE' && liberado) b = null; // só a etiqueta se libera; FORA_UTM e FORA_CEARA não
     bloqueio = b;
-    if (!b) caso = calcularCaso(rede, base, []);
+    if (!b) { propor(); calcular(); }
+  }
+
+  function prontoParaBaixar() {
+    if (!rede || !base || !caso || !projeto) throw new Error(ERRO_SEM_CASO);
+    if (apps.some((a) => a.resposta === 'pendente')) throw new Error(ERRO_APP_PENDENTE);
+    return { os: projeto.os, cs: montarCamadas(projeto.os, caso, rede, [], base) };
   }
 
   // deixa a tela pintar "Lendo..." antes de uma conta pesada
@@ -139,6 +203,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         base = lida;
         kmzNome = nome;
         rede = null; dxf = null; projeto = null; liberado = false; chaveEtiqueta = '';
+        respostas = new Map(); m2Postes = {};
         recalcular();
         if (armazem) {
           try { await armazem.guardar(CHAVE_BASE, { nome, base: lida }); } catch { /* segue sem guardar */ }
@@ -178,6 +243,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         dxf = novoDxf;
         projeto = { nome, os: os.trim(), detalhe };
         liberado = false; chaveEtiqueta = '';
+        respostas = new Map(); m2Postes = {};
         recalcular();
       } catch (e) {
         erro = mensagem(e); erroPasso = 2;
@@ -208,6 +274,73 @@ export function criarEstado(deps: Dependencias = {}): Estado {
       recalcular();
       avisar();
     },
+
+    confirmarApp(i, largura) {
+      const a = apps[i];
+      if (!a) return;
+      if (!Number.isFinite(largura) || largura <= 0) { a.erro = ERRO_LARGURA; avisar(); return; }
+      if (largura !== a.proposta.largura) a.proposta = refazerAppNoNucleo(a.proposta, largura);
+      try {
+        confirmarAppNoNucleo(a.proposta); // recusa APP vazia
+        a.resposta = 'confirmada';
+        a.erro = null;
+      } catch (e) {
+        a.resposta = 'pendente';
+        a.erro = mensagem(e);
+      }
+      guardarResposta(a);
+      calcular();
+      avisar();
+    },
+
+    recusarApp(i) {
+      const a = apps[i];
+      if (!a) return;
+      a.resposta = 'recusada'; a.erro = null;
+      guardarResposta(a);
+      calcular();
+      avisar();
+    },
+
+    reabrirApp(i) {
+      const a = apps[i];
+      if (!a) return;
+      a.resposta = 'pendente'; a.erro = null;
+      guardarResposta(a);
+      calcular();
+      avisar();
+    },
+
+    refazerApp(i, largura) {
+      const a = apps[i];
+      if (!a) return;
+      if (!Number.isFinite(largura) || largura <= 0) { a.erro = ERRO_LARGURA; avisar(); return; }
+      a.proposta = refazerAppNoNucleo(a.proposta, largura);
+      a.erro = null;
+      if (a.resposta === 'confirmada') a.resposta = 'pendente'; // a largura mudou: precisa confirmar de novo
+      guardarResposta(a);
+      calcular();
+      avisar();
+    },
+
+    mudarM2Poste(id, m2) {
+      if (!Number.isFinite(m2) || m2 < 0) return; // a tela valida e avisa; aqui o valor ruim não entra na conta
+      m2Postes = { ...m2Postes, [id]: m2 };
+      calcular();
+      avisar();
+    },
+
+    baixarPacote() {
+      const { os, cs } = prontoParaBaixar();
+      return { nome: `kit-${os}-espacial.zip`, bytes: montarPacote(os, cs) };
+    },
+
+    baixarGoogleEarth() {
+      const { os, cs } = prontoParaBaixar();
+      return { nome: `${os} UNIFICADO.kml`, texto: gravarKml(unificar(os, cs).kml) };
+    },
+
+    conferir: (bytes, dxfBytes) => conferirZip(bytes, dxfBytes),
 
     ler: () => atual,
     aoMudar(f) {

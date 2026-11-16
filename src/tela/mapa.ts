@@ -7,7 +7,7 @@ import type { Poste, Pt, Rede, Vao } from '../nucleo/tipos.ts';
 import type { Retrato } from './estado.ts';
 
 export interface AcoesMapa { marcarVao(id: string): void }
-export type EntradaMapa = Pick<Retrato, 'base' | 'rede'>;
+export type EntradaMapa = Pick<Retrato, 'base' | 'rede'> & { apps?: Retrato['apps'] };
 export interface Mapa {
   elemento: SVGSVGElement;
   atualizar(r: EntradaMapa): void;
@@ -79,9 +79,10 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
   const svg = el('svg', { class: 'mapa', role: 'img', 'aria-label': 'Mapa da rede, das áreas protegidas e das estradas' }) as SVGSVGElement;
   const gEstradas = el('g', { class: 'estradas' });
   const gAreas = el('g', { class: 'areas' });
+  const gApps = el('g', { class: 'apps' });
   const gVaos = el('g', { class: 'vaos' });
   const gPostes = el('g', { class: 'postes' });
-  svg.append(gEstradas, gAreas, gVaos, gPostes);
+  svg.append(gEstradas, gAreas, gApps, gVaos, gPostes);
   raiz.append(svg);
 
   let vb = { x: 0, y: -1000, w: 2000 }; // viewBox: canto, largura; a altura vem do formato da tela
@@ -129,6 +130,19 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
         gAreas.append(el('path', { class: classe, d, 'fill-rule': 'evenodd' }, [titulo(nome)]));
       }
       for (const l of a.linhas) gAreas.append(el('polyline', { class: `${classe} linha`, points: pontos(l) }, [titulo(nome)]));
+    }
+  }
+
+  // APP proposta (tracejada) ou confirmada (cheia); a recusada não aparece
+  function desenharApps(apps: NonNullable<EntradaMapa['apps']>) {
+    gApps.replaceChildren();
+    for (const a of apps) {
+      if (a.resposta === 'recusada') continue;
+      const d = a.proposta.poligonos
+        .map((aneis) => aneis.map((anel) => `M${pontos(alivia(anel)).replace(/ /g, ' L')}Z`).join(' '))
+        .join(' ');
+      const rotulo = `APP de ${a.proposta.agua.nome}, ${a.proposta.largura} m (${a.resposta === 'confirmada' ? 'confirmada' : 'proposta'})`;
+      gApps.append(el('path', { class: `app ${a.resposta}`, d, 'fill-rule': 'evenodd' }, [titulo(rotulo)]));
     }
   }
 
@@ -207,7 +221,8 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
   return {
     elemento: svg,
     ajustar,
-    atualizar({ base, rede }) {
+    atualizar({ base, rede, apps }) {
+      desenharApps(rede ? (apps ?? []) : []);
       if (!rede) {
         gVaos.replaceChildren(); gPostes.replaceChildren(); gAreas.replaceChildren();
         caixaAtual = null; chaveAjuste = ''; chaveAreas = '';

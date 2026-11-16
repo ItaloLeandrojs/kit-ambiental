@@ -14,3 +14,16 @@ export const TEXTOS = {
   posteAConfirmar: 'ponto sem nome no KML tratado como poste novo; confirme no mapa',
   faixaDominio: 'precisa de processo DNIT/SOP',
 } as const;
+
+// "Por que importa" de cada aviso do caso, para o cartão da tela (texto provisório: a confirmar com o Italo)
+export const PORQUE_AVISO: Record<string, string> = {
+  CRUZA_LINHA: 'Sem polígono, o site não calcula metros nem hectares nessa travessia.',
+  MUNICIPIO_INCERTO: 'O município define quem licencia em alguns casos.',
+  POSTE_A_CONFIRMAR: 'Um poste a mais ou a menos muda a área e a conta do caso.',
+  SEM_REDE_NOVA: 'Sem rede nova marcada, o site não tem o que cruzar com as áreas protegidas.',
+  APP_POSSIVEL: 'Obra dentro da APP pode exigir processo. APP só se confirma em campo.',
+  PROXIMA: 'Não há intervenção, mas o órgão quer saber que você olhou.',
+  LITORAL: 'Duna, restinga e beira-mar têm proteção própria e podem exigir processo.',
+  SEM_ORGAO: 'Sem saber o órgão, o processo pode ser protocolado no lugar errado.',
+  SEM_AREA: 'O KMZ não cobre todos os rios, lagoas e açudes: não ter área no KMZ não prova que não há APP.',
+};
