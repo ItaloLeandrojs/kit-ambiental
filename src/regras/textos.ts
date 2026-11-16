@@ -28,5 +28,8 @@ export const PORQUE_AVISO: Record<string, string> = {
   ETIQUETA_LONGE: 'Se as coordenadas escritas não batem com o desenho, o kit pode sair deslocado e o órgão devolve.',
   FORA_UTM: 'Um desenho fora das coordenadas reais não cai no mapa: o kit sairia deslocado e o órgão devolve.',
   FORA_CEARA: 'Um desenho fora do Ceará não cruza com as áreas do KMZ: o resultado não valeria nada.',
+  ARVORE_CARNAUBA: 'A carnaúba tem proteção própria em lei estadual. Cortar sem autorização gera multa.',
+  ARVORE_MUITAS: 'Árvore por árvore, o kit fica enorme e difícil de conferir; o órgão costuma querer a área.',
+  ARVORE_SEM_PONTO: 'Sem posição, a árvore não entra no kit: o órgão não saberia onde ela está.',
   SEM_AREA: 'O KMZ não cobre todos os rios, lagoas e açudes: não ter área no KMZ não prova que não há APP.',
 };

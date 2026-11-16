@@ -31,7 +31,7 @@ const buscar: Buscar = async (caminho) => {
 
 const estado = criarEstado({ lerAreas: lerNoTrabalhador, armazem: { guardar, ler } });
 const barra = criarStatus(document.getElementById('status')!, estado);
-const mapa = criarMapa(document.getElementById('palco')!, { marcarVao: (id) => estado.marcarVao(id) }, (p: Pt | null) => barra.cursor(p));
+const mapa = criarMapa(document.getElementById('palco')!, { marcarVao: (id) => estado.marcarVao(id), clicarNoMapa: (p) => estado.clicarNoMapa(p), fecharLimpeza: () => estado.fecharLimpeza() }, (p: Pt | null) => barra.cursor(p));
 criarPainel(document.getElementById('passos')!, estado);
 document.getElementById('ajustar')!.addEventListener('click', () => mapa.ajustar());
 

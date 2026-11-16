@@ -203,9 +203,6 @@ svg.mapa .poste.a-confirmar { stroke: var(--amarelo); stroke-width: 11px; stroke
 /* Passos de verdade */
 .passo.bloqueado > summary { cursor: not-allowed; color: var(--texto-3); }
 .passo.bloqueado > summary::after { content: ""; }
-.passo.em-breve > summary { cursor: default; color: var(--texto-3); font-weight: 500; }
-.passo.em-breve > summary::after { content: ""; }
-.passo.em-breve .num { opacity: .6; }
 .soltar.sobre { border-color: var(--amarelo); color: var(--texto); }
 .soltar input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .soltar { position: relative; cursor: pointer; }
@@ -245,3 +242,23 @@ svg.mapa .app.confirmada { fill: rgba(243,196,47,.22); stroke-dasharray: none; }
 .cartao .larg input { width: 64px; height: 28px; text-align: right; padding: 0 6px; font-family: var(--fonte-dado); font-size: 12px; color: var(--texto); background: var(--painel); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
 .corpo > .botao { justify-self: start; }
 .corpo > .botao.grande { justify-self: stretch; }
+
+/* Árvores: miniatura local, mapa em modo de clique */
+.arvore { position: relative; }
+.arvore .foto { overflow: hidden; background-size: cover; background-position: center; }
+.arvore .foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.arvore .campos { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.arvore .campos input[type="text"], .arvore .campos select { height: 28px; padding: 0 6px; font: inherit; font-size: 12px; color: var(--texto); background: var(--painel); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
+.arvore .campos input[type="text"] { width: 130px; }
+.arvore .nota { color: var(--texto-3); font-size: 12px; margin: 4px 0 0; }
+.arvore .nota.am { color: var(--amarelo); }
+.arvore .l.verm { color: var(--vermelho); }
+.arvores-lista { display: grid; gap: 8px; }
+.palco > svg.mapa.clicando { cursor: crosshair; }
+.palco > svg.mapa.clicando:active { cursor: crosshair; }
+svg.mapa .arvore-ponto { fill: none; stroke: var(--verde); stroke-width: 9px; stroke-linecap: round; pointer-events: none; }
+svg.mapa .arvore-ponto.rascunho { stroke-width: 5px; }
+svg.mapa .arvore-ponto.supressao { stroke: var(--vermelho); }
+svg.mapa .limpeza { fill: rgba(76,195,138,.16); stroke: var(--verde); stroke-width: 1.5px; pointer-events: none; }
+svg.mapa .limpeza.rascunho { fill: none; stroke-dasharray: 5 3; }
+.avisos-modo { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

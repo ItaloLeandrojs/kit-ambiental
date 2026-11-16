@@ -2,6 +2,7 @@
 // Não sabe de DOM nem de worker: quem monta a tela passa o leitor do KMZ e o armazém.
 import { lerAreasProtegidas, type BaseAreas } from '../nucleo/areas.ts';
 import { proporApps, refazerApp as refazerAppNoNucleo, confirmarApp as confirmarAppNoNucleo, type AppProposta } from '../nucleo/app.ts';
+import { avisosArvores, camadasArvores, posicaoDaFoto, type Arvore, type IntervencaoArvore } from '../nucleo/arvores.ts';
 import { montarCamadas, unificar } from '../nucleo/camadas.ts';
 import { calcularCaso, type AreaConfirmada, type Caso } from '../nucleo/caso.ts';
 import { conferirZip, type ItemConferencia } from '../nucleo/conferir.ts';
@@ -11,13 +12,18 @@ import { lerDxfGeometria, type DxfGeo } from '../nucleo/dxf.ts';
 import { lerKml } from '../nucleo/kml.ts';
 import { conferirEtiquetas, conferirLocal } from '../nucleo/local.ts';
 import { incluirCamada as incluirCamadaNoNucleo, camadasCandidatas, marcarVao as marcarVaoNoNucleo, proporRedeDxf, proporRedeKml } from '../nucleo/rede.ts';
-import type { Aviso, Rede, Situacao, TipoRede, Vao } from '../nucleo/tipos.ts';
+import type { Aviso, Pt, Rede, Situacao, TipoRede, Vao } from '../nucleo/tipos.ts';
 
 export interface Projeto { nome: string; os: string; detalhe: string }
 
 export type RespostaApp = 'pendente' | 'confirmada' | 'recusada';
 /** Uma APP proposta em volta de uma água, com a resposta do projetista. */
 export interface AppDoCaso { proposta: AppProposta; resposta: RespostaApp; erro: string | null }
+
+/** O que o clique no mapa faz agora: pôr uma árvore sem GPS, ou acrescentar um vértice da limpeza de faixa. */
+export type ModoMapa = { t: 'arvore'; id: string } | { t: 'limpeza'; pts: Pt[] } | null;
+/** De onde veio o ponto da árvore e o que o site avisou sobre a foto. */
+export interface InfoFoto { aviso: string | null; origem: 'gps' | 'mapa' | null }
 
 export interface Retrato {
   base: BaseAreas | null;
@@ -35,6 +41,13 @@ export interface Retrato {
   apps: AppDoCaso[]; // uma por água a até 100 m da rede nova
   appsPendentes: number; // quantas ainda não foram confirmadas nem recusadas
   m2Postes: Record<string, number>; // m² editados por poste novo sem rede nova na área
+  arvores: Arvore[];
+  infoFotos: Record<string, InfoFoto>; // por id da árvore
+  limpeza: Pt[][]; // áreas de limpeza de faixa já fechadas
+  modoMapa: ModoMapa;
+  avisosArvores: Aviso[];
+  arvoresSemPonto: number;
+  erroArvores: string | null;
 }
 
 export interface Armazem {
@@ -62,6 +75,19 @@ export interface Estado {
   /** Só redesenha a APP `i` com outra largura, sem responder (para ver no mapa). */
   refazerApp(i: number, largura: number): void;
   mudarM2Poste(id: string, m2: number): void;
+  /** Lê o GPS de cada foto e cria uma árvore por foto (poda, sem espécie). Devolve os ids na ordem das fotos. */
+  adicionarFotos(fotos: { nome: string; bytes: Uint8Array }[]): string[];
+  mudarArvore(id: string, mudanca: { especie?: string; intervencao?: IntervencaoArvore }): void;
+  removerArvore(id: string): void;
+  /** A próxima vez que a pessoa clicar no mapa, a árvore `id` vai para lá. De novo com a mesma árvore cancela. */
+  colocarArvore(id: string): void;
+  comecarLimpeza(): void;
+  /** Fecha o polígono da limpeza de faixa (duplo clique no mapa). Com menos de 3 vértices, descarta e avisa. */
+  fecharLimpeza(): void;
+  removerLimpeza(i: number): void;
+  cancelarModo(): void;
+  /** Clique no mapa, em UTM: vale só quando há um modo ativo. */
+  clicarNoMapa(p: Pt): void;
   baixarPacote(): { nome: string; bytes: Uint8Array };
   /** O KML unificado, para abrir no Google Earth. */
   baixarGoogleEarth(): { nome: string; texto: string };
@@ -73,6 +99,8 @@ export interface Estado {
 
 export const ERRO_OS = 'A OS tem 10 dígitos, com os zeros da frente.';
 export const ERRO_APP_PENDENTE = 'Responda as APPs propostas antes de baixar';
+export const ERRO_ARVORE_SEM_PONTO = 'Marque no mapa as árvores sem posição antes de baixar';
+export const ERRO_LIMPEZA_CURTA = 'A limpeza de faixa precisa de pelo menos 3 cantos. Clique os cantos no mapa e feche com duplo clique.';
 export const ERRO_SEM_CASO = 'Falta o caso: abra o KMZ e o projeto, e resolva os avisos vermelhos.';
 export const ERRO_LARGURA = 'A largura da APP precisa ser um número maior que zero, em metros.';
 export const ERRO_SEM_KMZ = 'Abra primeiro o KMZ de Áreas Protegidas (passo 1).';
@@ -113,6 +141,12 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   let caso: Caso | null = null;
   let apps: AppDoCaso[] = [];
   let m2Postes: Record<string, number> = {};
+  let arvores: Arvore[] = [];
+  let infoFotos: Record<string, InfoFoto> = {};
+  let limpeza: Pt[][] = [];
+  let modoMapa: ModoMapa = null;
+  let erroArvores: string | null = null;
+  let contaArvores = 0;
   // respostas dadas, por id da água: sobrevivem a marcar um vão (que propõe as APPs de novo)
   let respostas = new Map<number, { resposta: RespostaApp; largura: number }>();
   let atual: Retrato;
@@ -121,7 +155,11 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     base, rede, bloqueio, caso, ocupado, erro, erroPasso, trabalho, kmzNome, projeto, liberado,
     camadas: dxf ? camadasCandidatas(dxf) : [],
     apps, appsPendentes: apps.filter((a) => a.resposta === 'pendente').length, m2Postes,
+    arvores, infoFotos, limpeza, modoMapa, erroArvores,
+    avisosArvores: avisosArvores(arvores), arvoresSemPonto: arvores.filter((a) => a.ponto === null).length,
   });
+  // outro KMZ ou outro projeto: as árvores eram de outra obra
+  const limparArvores = () => { arvores = []; infoFotos = {}; limpeza = []; modoMapa = null; erroArvores = null; };
   const avisar = () => {
     atual = montar();
     for (const f of [...ouvintes]) f();
@@ -170,7 +208,8 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   function prontoParaBaixar() {
     if (!rede || !base || !caso || !projeto) throw new Error(ERRO_SEM_CASO);
     if (apps.some((a) => a.resposta === 'pendente')) throw new Error(ERRO_APP_PENDENTE);
-    return { os: projeto.os, cs: montarCamadas(projeto.os, caso, rede, [], base) };
+    if (arvores.some((a) => a.ponto === null)) throw new Error(ERRO_ARVORE_SEM_PONTO);
+    return { os: projeto.os, cs: montarCamadas(projeto.os, caso, rede, camadasArvores(projeto.os, arvores, limpeza), base) };
   }
 
   // deixa a tela pintar "Lendo..." antes de uma conta pesada
@@ -203,7 +242,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         base = lida;
         kmzNome = nome;
         rede = null; dxf = null; projeto = null; liberado = false; chaveEtiqueta = '';
-        respostas = new Map(); m2Postes = {};
+        respostas = new Map(); m2Postes = {}; limparArvores();
         recalcular();
         if (armazem) {
           try { await armazem.guardar(CHAVE_BASE, { nome, base: lida }); } catch { /* segue sem guardar */ }
@@ -243,7 +282,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         dxf = novoDxf;
         projeto = { nome, os: os.trim(), detalhe };
         liberado = false; chaveEtiqueta = '';
-        respostas = new Map(); m2Postes = {};
+        respostas = new Map(); m2Postes = {}; limparArvores();
         recalcular();
       } catch (e) {
         erro = mensagem(e); erroPasso = 2;
@@ -327,6 +366,86 @@ export function criarEstado(deps: Dependencias = {}): Estado {
       if (!Number.isFinite(m2) || m2 < 0) return; // a tela valida e avisa; aqui o valor ruim não entra na conta
       m2Postes = { ...m2Postes, [id]: m2 };
       calcular();
+      avisar();
+    },
+
+    adicionarFotos(fotos) {
+      if (!base) return [];
+      erroArvores = null;
+      const ids: string[] = [];
+      for (const f of fotos) {
+        const { ponto, aviso } = posicaoDaFoto(f.bytes, base.municipios);
+        const id = `arvore-${++contaArvores}`;
+        arvores = [...arvores, { id, foto: f.nome, ponto, especie: '', intervencao: 'poda' }];
+        infoFotos = { ...infoFotos, [id]: { aviso, origem: ponto ? 'gps' : null } };
+        ids.push(id);
+      }
+      avisar();
+      return ids;
+    },
+
+    mudarArvore(id, mudanca) {
+      arvores = arvores.map((a) => (a.id === id ? {
+        ...a,
+        especie: mudanca.especie ?? a.especie,
+        intervencao: mudanca.intervencao ?? a.intervencao,
+      } : a));
+      avisar();
+    },
+
+    removerArvore(id) {
+      arvores = arvores.filter((a) => a.id !== id);
+      const { [id]: _fora, ...resto } = infoFotos;
+      infoFotos = resto;
+      if (modoMapa?.t === 'arvore' && modoMapa.id === id) modoMapa = null;
+      avisar();
+    },
+
+    colocarArvore(id) {
+      erroArvores = null;
+      modoMapa = modoMapa?.t === 'arvore' && modoMapa.id === id ? null : { t: 'arvore', id };
+      avisar();
+    },
+
+    comecarLimpeza() {
+      erroArvores = null;
+      modoMapa = modoMapa?.t === 'limpeza' ? modoMapa : { t: 'limpeza', pts: [] };
+      avisar();
+    },
+
+    fecharLimpeza() {
+      if (modoMapa?.t !== 'limpeza') return;
+      if (modoMapa.pts.length < 3) {
+        erroArvores = ERRO_LIMPEZA_CURTA;
+      } else {
+        limpeza = [...limpeza, modoMapa.pts];
+        erroArvores = null;
+      }
+      modoMapa = null;
+      avisar();
+    },
+
+    removerLimpeza(i) {
+      limpeza = limpeza.filter((_, k) => k !== i);
+      avisar();
+    },
+
+    cancelarModo() {
+      modoMapa = null;
+      erroArvores = null;
+      avisar();
+    },
+
+    clicarNoMapa(p) {
+      if (!modoMapa) return;
+      if (modoMapa.t === 'arvore') {
+        const id = modoMapa.id;
+        arvores = arvores.map((a) => (a.id === id ? { ...a, ponto: p } : a));
+        infoFotos = { ...infoFotos, [id]: { aviso: infoFotos[id]?.aviso ?? null, origem: 'mapa' } };
+        modoMapa = null;
+      } else {
+        modoMapa = { t: 'limpeza', pts: [...modoMapa.pts, p] };
+      }
       avisar();
     },
 

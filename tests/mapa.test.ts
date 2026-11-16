@@ -139,4 +139,44 @@ describe('mapa', () => {
     const r: Rede = { origem: 'dxf', vaos: [], postes: [poste('a', [500000, 9500000]), poste('b', [100000, 9100000], { novo: false })] };
     expect(caixaDaRede(r)).toEqual([500000, 9500000, 500000, 9500000]);
   });
+
+  describe('árvores e limpeza de faixa', () => {
+    const arvores = [
+      { id: 'a1', foto: 'a.jpg', ponto: [500020, 9500010] as Pt, especie: 'Mulungu', intervencao: 'poda' as const },
+      { id: 'a2', foto: 'b.jpg', ponto: null, especie: '', intervencao: 'poda' as const },
+      { id: 'a3', foto: 'c.jpg', ponto: [500030, 9500010] as Pt, especie: '', intervencao: 'supressao' as const },
+    ];
+
+    it('desenha só as árvores com ponto, a limpeza fechada e a que está sendo desenhada', () => {
+      const m = criarMapa(raiz, { marcarVao: () => {} });
+      m.atualizar({ base: BASE, rede: REDE, arvores, limpeza: [[[0, 0], [10, 0], [10, 10]]], modoMapa: { t: 'limpeza', pts: [[1, 1], [2, 2]] } });
+      expect(m.elemento.querySelectorAll('path.arvore-ponto.poda, path.arvore-ponto.supressao')).toHaveLength(2);
+      expect(m.elemento.querySelectorAll('polygon.limpeza')).toHaveLength(1);
+      expect(m.elemento.querySelectorAll('polyline.limpeza.rascunho')).toHaveLength(1);
+    });
+
+    it('com um modo ativo, o clique vai para clicarNoMapa e não troca a marca do vão', () => {
+      const cliques: Pt[] = [];
+      const m = criarMapa(raiz, { marcarVao: (id) => { chamadas.push(id); }, clicarNoMapa: (p) => { cliques.push(p); } });
+      m.atualizar({ base: BASE, rede: REDE, arvores: [], limpeza: [], modoMapa: { t: 'arvore', id: 'a2' } });
+      expect(m.elemento.classList.contains('clicando')).toBe(true);
+      m.elemento.querySelector<SVGElement>('polyline[data-vao="v1"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      expect(cliques).toHaveLength(1);
+      expect(chamadas).toEqual([]);
+      // o segundo clique de um duplo clique não vira vértice
+      m.elemento.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }));
+      expect(cliques).toHaveLength(1);
+    });
+
+    it('duplo clique fecha a limpeza só com modo ativo', () => {
+      let fechou = 0;
+      const m = criarMapa(raiz, { marcarVao: () => {}, fecharLimpeza: () => { fechou++; } });
+      m.atualizar({ base: BASE, rede: REDE, arvores: [], limpeza: [], modoMapa: null });
+      m.elemento.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      expect(fechou).toBe(0);
+      m.atualizar({ base: BASE, rede: REDE, arvores: [], limpeza: [], modoMapa: { t: 'limpeza', pts: [] } });
+      m.elemento.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      expect(fechou).toBe(1);
+    });
+  });
 });

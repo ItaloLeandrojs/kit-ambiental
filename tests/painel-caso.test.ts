@@ -44,7 +44,8 @@ async function noCaso() {
   criarPainel(raiz, estado, { salvar });
   await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
   await estado.carregarProjeto(DXF, 'obra.dxf', '0000000001');
-  botao('Rede confirmada, ver o caso').click();
+  botao('Rede confirmada, seguir').click();
+  botao('Seguir para o caso').click();
 }
 
 beforeEach(() => {
@@ -219,7 +220,8 @@ describe('painel: avisos e documentos', () => {
     criarPainel(raiz, estado, { salvar });
     await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
     await estado.carregarProjeto(DXF, 'obra.dxf', '0000000001');
-    botao('Rede confirmada, ver o caso').click();
+    botao('Rede confirmada, seguir').click();
+    botao('Seguir para o caso').click();
     expect(estado.ler().apps).toHaveLength(2);
     const i = estado.ler().apps.findIndex((a) => a.proposta.agua.id === 3);
     estado.confirmarApp(i, 100);

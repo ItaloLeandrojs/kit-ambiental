@@ -6,8 +6,14 @@ import type { Aresta } from '../nucleo/base.ts';
 import type { Poste, Pt, Rede, Vao } from '../nucleo/tipos.ts';
 import type { Retrato } from './estado.ts';
 
-export interface AcoesMapa { marcarVao(id: string): void }
-export type EntradaMapa = Pick<Retrato, 'base' | 'rede'> & { apps?: Retrato['apps'] };
+export interface AcoesMapa {
+  marcarVao(id: string): void;
+  /** Clique no mapa com um modo ativo (árvore sem GPS ou limpeza de faixa), em UTM. */
+  clicarNoMapa?(p: Pt): void;
+  /** Duplo clique: fecha a limpeza de faixa. */
+  fecharLimpeza?(): void;
+}
+export type EntradaMapa = Pick<Retrato, 'base' | 'rede'> & Partial<Pick<Retrato, 'apps' | 'arvores' | 'limpeza' | 'modoMapa'>>;
 export interface Mapa {
   elemento: SVGSVGElement;
   atualizar(r: EntradaMapa): void;
@@ -82,13 +88,15 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
   const gApps = el('g', { class: 'apps' });
   const gVaos = el('g', { class: 'vaos' });
   const gPostes = el('g', { class: 'postes' });
-  svg.append(gEstradas, gAreas, gApps, gVaos, gPostes);
+  const gArvores = el('g', { class: 'arvores' });
+  svg.append(gEstradas, gAreas, gApps, gVaos, gPostes, gArvores);
   raiz.append(svg);
 
   let vb = { x: 0, y: -1000, w: 2000 }; // viewBox: canto, largura; a altura vem do formato da tela
   let chaveAjuste = '';
   let chaveAreas = '';
   let ultimaBase: EntradaMapa['base'] = null;
+  let modoAtivo = false; // há um modo de clique: o clique no mapa não troca a marca do vão
 
   const aspecto = (): number => {
     const r = svg.getBoundingClientRect();
@@ -146,6 +154,23 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
     }
   }
 
+  // árvores com ponto, limpezas fechadas e a limpeza que está sendo desenhada
+  function desenharArvores(arvores: NonNullable<EntradaMapa['arvores']>, limpeza: Pt[][], modo: EntradaMapa['modoMapa']) {
+    gArvores.replaceChildren();
+    for (const l of limpeza) {
+      gArvores.append(el('polygon', { class: 'limpeza', points: pontos(l) }, [titulo('Limpeza de faixa')]));
+    }
+    if (modo?.t === 'limpeza' && modo.pts.length > 0) {
+      gArvores.append(el('polyline', { class: 'limpeza rascunho', points: pontos(modo.pts) }));
+      for (const p of modo.pts) gArvores.append(el('path', { class: 'arvore-ponto rascunho', d: `M${ponto(p).replace(',', ' ')} l0 0` }));
+    }
+    for (const a of arvores) {
+      if (!a.ponto) continue;
+      const rotulo = `${a.especie.trim() || 'Árvore'}: ${a.intervencao === 'supressao' ? 'supressão' : 'poda'}`;
+      gArvores.append(el('path', { class: `arvore-ponto ${a.intervencao}`, d: `M${ponto(a.ponto).replace(',', ' ')} l0 0` }, [titulo(rotulo)]));
+    }
+  }
+
   function desenharRede(rede: Rede) {
     gVaos.replaceChildren();
     gPostes.replaceChildren();
@@ -193,9 +218,21 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
 
   svg.addEventListener('click', (e: Event) => {
     if (arrastou) { arrastou = false; return; }
+    if (modoAtivo) {
+      const ev = e as MouseEvent;
+      if (ev.detail >= 2) return; // o segundo clique do duplo clique não é um vértice novo
+      acoes.clicarNoMapa?.(deTela(ev.clientX, ev.clientY));
+      return;
+    }
     const alvo = (e.target as Element | null)?.closest?.('[data-vao]');
     const id = alvo?.getAttribute('data-vao');
     if (id) acoes.marcarVao(id);
+  });
+
+  svg.addEventListener('dblclick', (e: Event) => {
+    if (!modoAtivo) return;
+    e.preventDefault();
+    acoes.fecharLimpeza?.();
   });
 
   svg.addEventListener('pointermove', (e: Event) => {
@@ -221,16 +258,19 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
   return {
     elemento: svg,
     ajustar,
-    atualizar({ base, rede, apps }) {
+    atualizar({ base, rede, apps, arvores, limpeza, modoMapa }) {
       desenharApps(rede ? (apps ?? []) : []);
+      modoAtivo = !!rede && !!modoMapa;
+      svg.classList.toggle('clicando', modoAtivo);
       if (!rede) {
-        gVaos.replaceChildren(); gPostes.replaceChildren(); gAreas.replaceChildren();
+        gVaos.replaceChildren(); gPostes.replaceChildren(); gAreas.replaceChildren(); gArvores.replaceChildren();
         caixaAtual = null; chaveAjuste = ''; chaveAreas = '';
         return;
       }
       const caixa = caixaDaRede(rede);
       caixaAtual = caixa;
       desenharRede(rede);
+      desenharArvores(arvores ?? [], limpeza ?? [], modoMapa ?? null);
       if (!caixa) return;
       const chave = caixa.map((n) => Math.round(n)).join(',');
       if (base && (base !== ultimaBase || chave !== chaveAreas)) {

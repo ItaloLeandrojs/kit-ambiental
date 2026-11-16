@@ -1,6 +1,7 @@
 // Painel de passos. Fica aberto só o passo atual; os passos feitos viram uma linha de resumo,
-// e clicar no resumo reabre o passo. O passo 4 (árvores) vem na próxima tarefa.
+// e clicar no resumo reabre o passo. O passo 4 (árvores) é opcional: "se houver".
 import type { Aviso, Poste, Pt, TipoRede, Vao } from '../nucleo/tipos.ts';
+import { avisosArvores, type Arvore } from '../nucleo/arvores.ts';
 import type { Caso, Intervencao } from '../nucleo/caso.ts';
 import { ehAgua } from '../nucleo/areas.ts';
 import type { ItemConferencia } from '../nucleo/conferir.ts';
@@ -8,7 +9,7 @@ import { coordTexto, haTexto, metrosTexto } from '../nucleo/formato.ts';
 import { resumoTexto } from '../nucleo/resumo.ts';
 import { LARGURA_APP, M2_POSTE_SEM_REDE } from '../regras/faixas.ts';
 import { PORQUE_AVISO } from '../regras/textos.ts';
-import { contaNaRede, ERRO_APP_PENDENTE, osValida, type AppDoCaso, type Estado, type Retrato } from './estado.ts';
+import { contaNaRede, ERRO_APP_PENDENTE, ERRO_ARVORE_SEM_PONTO, osValida, type AppDoCaso, type Estado, type Retrato } from './estado.ts';
 import { SITUACAO_TEXTO, TIPO_TEXTO } from './mapa.ts';
 
 type Filho = Node | string | null | false | undefined;
@@ -37,7 +38,6 @@ const PASSOS = [
   { n: 6, titulo: 'Baixar' },
   { n: 7, titulo: 'Conferir um zip' },
 ] as const;
-const EM_BREVE = new Set([4]);
 const AVISOS_DA_REDE = new Set(['POSTE_A_CONFIRMAR', 'SEM_REDE_NOVA']); // aparecem no passo 3, não no 5
 const ERRO_M2_TELA = 'Os m² do poste precisam ser um número, zero ou maior.';
 const PRAZO_POSTE = 5; // m: poste que dá nome à ponta do vão
@@ -93,6 +93,27 @@ function zona(texto: string, accept: string, aoEscolher: (f: File) => void, rotu
   return z;
 }
 
+// zona de soltar várias fotos de uma vez
+function zonaFotos(texto: string, aoEscolher: (fs: File[]) => void, rotulo: string): HTMLElement {
+  const entrada = h('input', { type: 'file', accept: 'image/*,.jpg,.jpeg,.heic,.heif', multiple: true, 'aria-label': rotulo, onchange: (e) => {
+    const fs = [...((e.target as HTMLInputElement).files ?? [])];
+    if (fs.length) aoEscolher(fs);
+    (e.target as HTMLInputElement).value = '';
+  } });
+  const z = h('label', {
+    class: 'soltar',
+    ondragover: (e) => { e.preventDefault(); z.classList.add('sobre'); },
+    ondragleave: () => z.classList.remove('sobre'),
+    ondrop: (e) => {
+      e.preventDefault();
+      z.classList.remove('sobre');
+      const fs = [...((e as DragEvent).dataTransfer?.files ?? [])];
+      if (fs.length) aoEscolher(fs);
+    },
+  }, texto, entrada);
+  return z;
+}
+
 function botaoTrocar(accept: string, aoEscolher: (f: File) => void, rotulo: string): HTMLElement {
   const entrada = h('input', { type: 'file', accept, 'aria-label': rotulo, class: 'so-leitor', tabindex: -1, style: 'display:none', onchange: (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
@@ -111,6 +132,8 @@ const TITULO_AVISO: Record<string, string> = {
   LITORAL: 'Município do litoral',
   SEM_ORGAO: 'Órgão não identificado',
   SEM_AREA: 'Sem área protegida no KMZ',
+  ARVORE_CARNAUBA: 'Carnaúba',
+  ARVORE_MUITAS: 'Muitas árvores',
 };
 
 function linhasDoAviso(a: Aviso, porque?: string): Filho[] {
@@ -197,6 +220,22 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
   let dxfConferir: Uint8Array | null = null;
   const abertura = new Map<number, boolean>(); // o que a pessoa abriu ou fechou à mão
   let projetoLido: { bytes: Uint8Array; nome: string } | null = null;
+  const miniaturas = new Map<string, string>(); // id da árvore -> endereço local da miniatura (nada sai do navegador)
+
+  const soltarMiniatura = (id: string) => {
+    const url = miniaturas.get(id);
+    if (url) { try { URL.revokeObjectURL(url); } catch { /* sem miniatura */ } }
+    miniaturas.delete(id);
+  };
+  const lerFotos = (fs: File[]) => {
+    void Promise.all(fs.map(async (f) => ({ nome: f.name, bytes: await lerBytes(f) }))).then((fotos) => {
+      const ids = estado.adicionarFotos(fotos);
+      ids.forEach((id, i) => {
+        try { miniaturas.set(id, URL.createObjectURL(fs[i])); } catch { /* sem miniatura: a lista mostra o nome */ }
+      });
+      desenhar();
+    });
+  };
 
   const lerProjeto = (f: File) => {
     void lerBytes(f).then((bytes) => {
@@ -209,7 +248,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     if (!r.base) return 1;
     if (!r.rede) return 2;
     if (!r.caso) return 3;
-    return avanco >= 5 ? avanco : 3;
+    return avanco >= 4 ? avanco : 3;
   }
 
   function resumoDoPasso(n: number, r: Retrato): string | null {
@@ -221,6 +260,13 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     if (n === 3 && r.rede) {
       const novos = r.rede.vaos.filter(contaNaRede).length;
       return `${novos} de ${r.rede.vaos.length} vãos são rede nova`;
+    }
+    if (n === 4 && r.caso) {
+      const podas = r.arvores.filter((a) => a.intervencao === 'poda').length;
+      const sup = r.arvores.filter((a) => a.intervencao === 'supressao').length;
+      const lim = r.limpeza.length;
+      if (r.arvores.length === 0 && lim === 0) return 'nenhuma árvore';
+      return [`${r.arvores.length} ${r.arvores.length === 1 ? 'árvore' : 'árvores'}`, `${podas} poda${podas === 1 ? '' : 's'}`, `${sup} ${sup === 1 ? 'supressão' : 'supressões'}`, lim ? `${lim} limpeza${lim === 1 ? '' : 's'} de faixa` : ''].filter(Boolean).join(' · ');
     }
     if (n === 5 && r.caso) return `${r.caso.intervencoes.length} áreas cruzadas · ${r.caso.avisos.length} avisos`;
     if (n === 6 && r.caso) return r.appsPendentes > 0 ? 'responda as APPs antes' : 'KML e SHP prontos';
@@ -345,8 +391,70 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       ...doCaso.map(blocoAviso),
       h('button', {
         type: 'button', class: 'botao forte', disabled: !r.caso,
-        onclick: () => { avanco = 5; desenhar(); },
-      }, 'Rede confirmada, ver o caso'),
+        onclick: () => { avanco = 4; desenhar(); },
+      }, 'Rede confirmada, seguir'),
+    ];
+  }
+
+  function cartaoArvore(a: Arvore, r: Retrato): HTMLElement {
+    const info = r.infoFotos[a.id];
+    const url = miniaturas.get(a.id);
+    const esperando = r.modoMapa?.t === 'arvore' && r.modoMapa.id === a.id;
+    const especie = h('input', {
+      type: 'text', value: a.especie, placeholder: 'Espécie (digite)', 'aria-label': `Espécie da árvore da foto ${a.foto}`,
+      onchange: (e) => estado.mudarArvore(a.id, { especie: (e.target as HTMLInputElement).value }),
+    });
+    const intervencao = h('select', {
+      'aria-label': `Intervenção da árvore da foto ${a.foto}`,
+      onchange: (e) => estado.mudarArvore(a.id, { intervencao: (e.target as HTMLSelectElement).value as Arvore['intervencao'] }),
+    }, h('option', { value: 'poda' }, 'Poda simples'), h('option', { value: 'supressao' }, 'Supressão'));
+    (intervencao as HTMLSelectElement).value = a.intervencao;
+    const linha = a.ponto
+      ? `${info?.origem === 'gps' ? 'GPS da foto' : 'Marcada no mapa'} · ${milhar(Math.round(a.ponto[1]))} N · ${milhar(Math.round(a.ponto[0]))} E`
+      : 'Sem posição: clique no mapa onde ela está.';
+    const carnauba = avisosArvores([a]).some((x) => x.codigo === 'ARVORE_CARNAUBA');
+    return h('div', { class: 'arvore', 'data-arvore': a.id },
+      url ? h('div', { class: 'foto' }, h('img', { src: url, alt: `Foto ${a.foto}` })) : h('div', { class: a.ponto ? 'foto' : 'foto sem' }, a.ponto ? '' : 'sem GPS'),
+      h('div', {},
+        h('div', { class: 't' }, especie),
+        h('div', { class: a.ponto ? 'l' : 'l verm' }, `${a.foto} · ${linha}`),
+        info?.aviso ? h('p', { class: 'nota am' }, info.aviso) : null,
+        carnauba ? h('p', { class: 'nota am' }, 'Carnaúba é espécie protegida (Decreto estadual 27.413/2004). Confirme com o órgão antes de cortar.') : null,
+        h('div', { class: 'campos' },
+          intervencao,
+          h('button', {
+            type: 'button', class: 'botao mini', 'aria-pressed': esperando ? 'true' : 'false',
+            onclick: () => estado.colocarArvore(a.id),
+          }, esperando ? 'Cancelar o clique' : a.ponto ? 'Mover no mapa' : 'Clicar no mapa'),
+          h('button', {
+            type: 'button', class: 'botao mini', 'aria-label': `Tirar a árvore da foto ${a.foto}`,
+            onclick: () => { soltarMiniatura(a.id); estado.removerArvore(a.id); },
+          }, 'Tirar'))));
+  }
+
+  function passo4(r: Retrato): Filho[] {
+    const modo = r.modoMapa;
+    return [
+      r.erroArvores ? h('p', { class: 'erro', role: 'alert' }, r.erroArvores) : null,
+      zonaFotos('Jogue aqui as fotos das árvores. Se a foto tiver GPS, o site lê o lugar sozinho.', lerFotos, 'Escolher as fotos das árvores'),
+      h('p', { class: 'ajuda' }, 'As fotos ficam só neste computador: o site lê a posição e mostra uma miniatura, nada é enviado.'),
+      modo?.t === 'arvore' ? h('p', { class: 'amarelo-txt', role: 'status' }, 'Clique no mapa onde a árvore está.') : null,
+      modo?.t === 'limpeza'
+        ? h('p', { class: 'amarelo-txt', role: 'status' }, `Desenhando a limpeza de faixa: ${modo.pts.length} ${modo.pts.length === 1 ? 'canto' : 'cantos'}. Clique os cantos no mapa e feche com duplo clique.`)
+        : null,
+      r.arvores.length ? h('div', { class: 'arvores-lista' }, ...r.arvores.map((a) => cartaoArvore(a, r))) : null,
+      h('div', { class: 'avisos-modo' },
+        modo?.t === 'limpeza'
+          ? h('button', { type: 'button', class: 'botao mini forte', onclick: () => estado.fecharLimpeza() }, 'Fechar a área')
+          : h('button', { type: 'button', class: 'botao mini', onclick: () => estado.comecarLimpeza() }, 'Desenhar limpeza de faixa'),
+        modo ? h('button', { type: 'button', class: 'botao mini', onclick: () => estado.cancelarModo() }, 'Cancelar') : null),
+      ...r.limpeza.map((l, i) => h('div', { class: 'arvore' },
+        h('div', { class: 'foto sem' }, 'faixa'),
+        h('div', {}, h('div', { class: 't' }, `Limpeza de faixa ${i + 1}`), h('div', { class: 'l' }, `${l.length} cantos`),
+          h('div', { class: 'campos' }, h('button', { type: 'button', class: 'botao mini', onclick: () => estado.removerLimpeza(i) }, 'Tirar'))))),
+      ...r.avisosArvores.map(blocoAviso),
+      h('p', { class: 'ajuda' }, 'Poda drástica não existe: vira supressão. Com mais de 20 árvores, desenhe a área de limpeza de faixa.'),
+      h('button', { type: 'button', class: 'botao forte', onclick: () => { estado.cancelarModo(); avanco = 5; desenhar(); } }, 'Seguir para o caso'),
     ];
   }
 
@@ -434,9 +542,10 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
   }
 
   function passo6(r: Retrato): Filho[] {
-    const travado = r.appsPendentes > 0;
+    const travado = r.appsPendentes > 0 || r.arvoresSemPonto > 0;
     return [
-      travado ? h('p', { class: 'amarelo-txt', role: 'status' }, ERRO_APP_PENDENTE) : null,
+      r.appsPendentes > 0 ? h('p', { class: 'amarelo-txt', role: 'status' }, ERRO_APP_PENDENTE) : null,
+      r.arvoresSemPonto > 0 ? h('p', { class: 'erro', role: 'alert' }, ERRO_ARVORE_SEM_PONTO) : null,
       erroBaixar ? h('p', { class: 'erro', role: 'alert' }, erroBaixar) : null,
       h('button', {
         type: 'button', class: 'botao forte grande', disabled: travado,
@@ -503,6 +612,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     if (n === 1) return passo1(r);
     if (n === 2) return passo2(r);
     if (n === 3 && r.rede) return passo3(r);
+    if (n === 4 && r.caso) return passo4(r);
     if (n === 5 && r.caso) return passo5(r, r.caso);
     if (n === 6 && r.caso) return passo6(r);
     if (n === 7) return passo7();
@@ -511,7 +621,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
 
   function legendaDoPasso(n: number, r: Retrato): string {
     const feito = resumoDoPasso(n, r);
-    if (EM_BREVE.has(n)) return 'vem nas próximas etapas';
+    if (n === 4) return !r.caso ? 'depois da rede' : (feito ?? 'se houver');
     if (n === 2 && !r.base) return 'abra o KMZ primeiro';
     if (n === 3 && !r.rede) return 'depois do projeto';
     if (n === 5) return r.bloqueio ? 'resolva o aviso vermelho do passo 3' : !r.caso ? 'depois da rede' : (feito ?? '');
@@ -535,17 +645,16 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const rolagemPainel = raiz.scrollTop;
 
     const lista = PASSOS.map(({ n, titulo }) => {
-      const emBreve = EM_BREVE.has(n);
       const corpo = corpoDoPasso(n, r);
-      const bloqueado = n === 5 || n === 6 ? !r.caso : n === 3 ? !r.rede : n === 2 ? !r.base : false;
-      const feito = (n === 1 && !!r.base) || (n === 2 && !!r.rede) || (n === 3 && atual > 3) || (n === 5 && atual > 5) || (n === 7 && !!conferencia);
-      const aberto = !emBreve && !bloqueado && (abertura.get(n) ?? n === atual);
-      const classe = ['passo', feito ? 'feito' : '', n === atual ? 'atual' : '', bloqueado ? 'bloqueado' : '', emBreve ? 'em-breve' : ''].filter(Boolean).join(' ');
+      const bloqueado = n === 4 || n === 5 || n === 6 ? !r.caso : n === 3 ? !r.rede : n === 2 ? !r.base : false;
+      const feito = (n === 1 && !!r.base) || (n === 2 && !!r.rede) || (n === 3 && atual > 3) || (n === 4 && atual > 4) || (n === 5 && atual > 5) || (n === 7 && !!conferencia);
+      const aberto = !bloqueado && (abertura.get(n) ?? n === atual);
+      const classe = ['passo', feito ? 'feito' : '', n === atual ? 'atual' : '', bloqueado ? 'bloqueado' : '', ''].filter(Boolean).join(' ');
       const sumario = h('summary', {
-        'aria-disabled': emBreve || bloqueado ? 'true' : undefined,
+        'aria-disabled': bloqueado ? 'true' : undefined,
         onclick: (e) => {
           e.preventDefault();
-          if (emBreve || bloqueado) return;
+          if (bloqueado) return;
           abertura.set(n, !aberto);
           desenhar();
         },
