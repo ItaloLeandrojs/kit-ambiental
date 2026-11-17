@@ -2,7 +2,7 @@
 
 Site estático que roda só no navegador. Diz se uma obra de rede elétrica no Ceará precisa de processo ambiental, monta o kit (KML e shapefile, na pasta certa) e confere o zip antes de ir para o órgão.
 
-Nada sai do computador: o KMZ, o projeto e as fotos são lidos no próprio navegador. A única chamada de rede é buscar os arquivos de estradas que já vêm com o site. O site tem `noindex` e ainda não foi publicado.
+Nada sai do computador: o KMZ, o projeto e as fotos são lidos no próprio navegador. A única chamada de rede é buscar os arquivos de estradas que já vêm com o site. O site está publicado em https://italoleandrojs.github.io/kit-ambiental/ e tem `noindex` (não aparece no Google).
 
 ## Como usar
 
