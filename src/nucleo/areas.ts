@@ -13,6 +13,12 @@ export interface AreaProtegida {
   caixa: [number, number, number, number];
   // polígono inválido que o conserto da leitura não resolveu: o caso não cruza a rede com ele e avisa em vermelho
   defeito?: true;
+  // polígono consertado na leitura com a área mudando mais que TOL_AVISO_CONSERTO: a maior fração |depois - antes| / antes.
+  // O caso avisa em amarelo quando a rede nova cruza a área ou passa a menos de 100 m (o conserto pode ter tirado um pedaço)
+  consertoGrande?: number;
+  // índices em `poligonos` dos pedaços que vieram desses consertos: o caso mede a distância só até eles,
+  // para que um polígono consertado não marque as outras partes da área (que podem estar longe)
+  poligonosConsertados?: number[];
 }
 export interface BaseAreas { revisao: string; data: string; areas: AreaProtegida[]; municipios: AreaProtegida[] }
 export interface Orgao { categoria: string; esfera: string; licencia: string; gestor: string; soIcmbio?: boolean; aConfirmar?: string }
@@ -80,8 +86,13 @@ function limparPoligono(aneis: Pt[][]): Pt[][] | null {
 // O KMZ real tem polígonos inválidos para o JSTS (anel que se toca, furo que encosta no anel): o cruzamento lança
 // "non-noded intersection". Buffer zero refaz o polígono válido; só vale se a área quase não muda.
 // muda quando o jeito de ler o KMZ muda (ex.: o conserto dos polígonos): a base guardada de antes é pedida de novo
-export const VERSAO_LEITURA = 2;
+export const VERSAO_LEITURA = 3; // 3: a área guarda o consertoGrande e os poligonosConsertados
 export const TOL_CONSERTO = 0.05; // fração da área: acima disso o conserto mudaria a área demais
+export const TOL_AVISO_CONSERTO = 0.005; // fração da área: acima disso o conserto vale um amarelo quando a obra cruza ou passa perto
+
+/** Quanto o conserto mudou a área, em fração da área de antes (0 quando não consertou). */
+export const mudancaDoConserto = (c: Conserto): number =>
+  c.consertado && c.areaAntes !== 0 ? Math.abs(c.areaDepois - c.areaAntes) / Math.abs(c.areaAntes) : 0;
 
 export interface Conserto { poligonos: Pt[][][]; consertado: boolean; defeito: boolean; areaAntes: number; areaDepois: number }
 
@@ -111,14 +122,19 @@ export function lerAreasProtegidas(bytes: Uint8Array, nomeArquivo: string, opcoe
     const poligonos: Pt[][][] = [];
     const linhas: Pt[][] = [];
     let defeito = false;
+    let mudanca = 0; // maior mudança de área entre os polígonos consertados desta feição
+    const consertados: number[] = []; // índices dos pedaços cujo conserto mudou a área além de TOL_AVISO_CONSERTO
     for (const g of f.geometrias) {
       if (g.t === 'poligono') {
         const aneis = limparPoligono(g.aneis);
         if (!aneis) continue;
         if (!consertar) { poligonos.push(aneis); continue; }
         const c = consertarPoligono(aneis);
+        const m = mudancaDoConserto(c);
+        if (m > TOL_AVISO_CONSERTO) c.poligonos.forEach((_, i) => consertados.push(poligonos.length + i));
         poligonos.push(...c.poligonos);
         if (c.defeito) defeito = true;
+        mudanca = Math.max(mudanca, m);
       } else if (g.t === 'linha') {
         const pts = g.pts.filter(noCearaLargo);
         if (pts.length >= 2) linhas.push(pts);
@@ -136,6 +152,7 @@ export function lerAreasProtegidas(bytes: Uint8Array, nomeArquivo: string, opcoe
       linhas,
       caixa: caixaDe(poligonos, linhas),
       ...(defeito ? { defeito: true as const } : {}),
+      ...(mudanca > TOL_AVISO_CONSERTO ? { consertoGrande: mudanca, poligonosConsertados: consertados } : {}),
     });
   }
   if (municipios.length < 100) throw new Error(ERRO_NAO_E_BASE);

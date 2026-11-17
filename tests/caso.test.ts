@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Poste, Pt, Rede, Situacao, TipoRede, Vao } from '../src/nucleo/tipos.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import { calcularCaso, type AreaConfirmada } from '../src/nucleo/caso.ts';
 import { TEXTOS } from '../src/regras/textos.ts';
+import { G } from '../src/nucleo/geom.ts';
 
 // tudo inventado, em metros, perto de (500000, 9500000)
 const X = 500000;
@@ -310,6 +311,93 @@ describe('calcularCaso', () => {
     const agua: AreaProtegida = { ...area('Açude Com Defeito', AGUA, 0, 0, 100, 100), poligonos: [[laco(0, 0)]], defeito: true };
     const caso = calcularCaso(rede([vao('a', 'BT', [pt(150, 50), pt(160, 50)])]), base([agua]), []);
     expect(caso.avisos.find((a) => a.codigo === 'AREA_NAO_CONFERIDA')?.texto).toBe(`Açude Com Defeito: ${TEXTOS.areaNaoConferida}`);
+  });
+
+  describe('área com o desenho consertado além de 0,5% (AREA_CONSERTADA)', () => {
+    const torta = (): AreaProtegida => ({ ...area('UC Torta', UC_ESTADUAL, 0, 0, 100, 100), consertoGrande: 0.0196 });
+    const consertada = (r: Rede, a: AreaProtegida) => calcularCaso(r, base([a]), []).avisos.filter((x) => x.codigo === 'AREA_CONSERTADA');
+
+    it('rede nova cruza: amarelo com o nome e a mudança, e a conta da intervenção segue', () => {
+      const caso = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([torta()]), []);
+      const avisos = caso.avisos.filter((x) => x.codigo === 'AREA_CONSERTADA');
+      expect(avisos).toHaveLength(1);
+      expect(avisos[0].nivel).toBe('amarelo');
+      expect(avisos[0].texto).toBe(`UC Torta: ${TEXTOS.areaConsertada}`);
+      expect(avisos[0].comoCorrigir).toContain('"UC Torta"');
+      expect(avisos[0].comoCorrigir).toContain('2%');
+      expect(`${avisos[0].texto}${avisos[0].comoCorrigir}`).not.toMatch(/[—–]/);
+      expect(caso.intervencoes.map((iv) => iv.area.nome)).toEqual(['UC Torta']);
+      expect(caso.avisos.filter((x) => x.nivel === 'vermelho')).toEqual([]);
+    });
+
+    it('rede nova a menos de 100 m sem cruzar: amarelo também (o pedaço tirado fica colado na área)', () => {
+      expect(consertada(rede([vao('a', 'BT', [pt(150, 50), pt(190, 50)])]), torta())).toHaveLength(1);
+    });
+
+    it('só poste novo dentro da área: amarelo', () => {
+      expect(consertada(rede([], [poste('p1', pt(50, 50))]), torta())).toHaveLength(1);
+    });
+
+    it('rede nova a mais de 100 m: nada', () => {
+      expect(consertada(rede([vao('a', 'BT', [pt(250, 50), pt(290, 50)])]), torta())).toEqual([]);
+    });
+
+    it('área sem a marca, ou com defeito (já sai o vermelho), não dá o amarelo', () => {
+      const r = rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]);
+      expect(consertada(r, area('UC Boa', UC_ESTADUAL, 0, 0, 100, 100))).toEqual([]);
+      const comDefeito = calcularCaso(r, base([{ ...torta(), defeito: true }]), []);
+      expect(comDefeito.avisos.map((x) => x.codigo)).toContain('AREA_NAO_CONFERIDA');
+      expect(comDefeito.avisos.map((x) => x.codigo)).not.toContain('AREA_CONSERTADA');
+    });
+
+    it('água consertada perto da rede: amarelo junto do APP_POSSIVEL (a APP sai desse desenho)', () => {
+      const agua: AreaProtegida = { ...area('Açude Torto', AGUA, 0, 0, 100, 100), consertoGrande: 0.03 };
+      const codigos = calcularCaso(rede([vao('a', 'BT', [pt(150, 50), pt(160, 50)])]), base([agua]), []).avisos.map((x) => x.codigo);
+      expect(codigos).toContain('AREA_CONSERTADA');
+      expect(codigos).toContain('APP_POSSIVEL');
+    });
+
+    it('sem rede nova marcada: só o vermelho SEM_REDE_NOVA, sem o amarelo', () => {
+      expect(consertada(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)], 'existente')]), torta())).toEqual([]);
+    });
+
+    it('rede nova a exatamente 100 m: amarelo (até 100 m, igual ao PROXIMA)', () => {
+      expect(consertada(rede([vao('a', 'BT', [pt(200, 50), pt(240, 50)])]), torta())).toHaveLength(1);
+    });
+
+    // área de duas partes: perto (0 a 100) e longe (1000 a 1100); a lista diz qual parte foi consertada
+    const duasPartes = (consertados: number[]): AreaProtegida => {
+      const a = area('UC Partida', UC_ESTADUAL, 0, 0, 1100, 100);
+      return { ...a, poligonos: [[retangulo(0, 0, 100, 100)], [retangulo(1000, 0, 1100, 100)]], consertoGrande: 0.02, poligonosConsertados: consertados };
+    };
+
+    it('área de várias partes: mede só até a parte consertada', () => {
+      const naParteBoa = rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]);
+      expect(consertada(naParteBoa, duasPartes([1]))).toEqual([]);
+      expect(consertada(naParteBoa, duasPartes([0]))).toHaveLength(1);
+      expect(consertada(rede([vao('a', 'BT', [pt(1150, 50), pt(1190, 50)])]), duasPartes([1]))).toHaveLength(1);
+    });
+
+    describe('com a conta lançando erro', () => {
+      afterEach(() => { vi.restoreAllMocks(); });
+
+      it('a distância até a parte consertada lança: avisa assim mesmo', () => {
+        const original = G.distancia;
+        const ehDaTorta = (g: unknown) => { const p = G.pontos(g)[0]; return p[0] === X && p[1] === Y; };
+        vi.spyOn(G, 'distancia').mockImplementation((a, b) => {
+          if (ehDaTorta(b)) throw new Error('distância falhou');
+          return original(a, b);
+        });
+        expect(consertada(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), torta())).toHaveLength(1);
+      });
+
+      it('o cruzamento da área consertada lança: só o vermelho AREA_NAO_CONFERIDA, sem o amarelo', () => {
+        vi.spyOn(G, 'dentro').mockImplementation(() => { throw new Error('cruzamento falhou'); });
+        const codigos = calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([torta()]), []).avisos.map((x) => x.codigo);
+        expect(codigos).toContain('AREA_NAO_CONFERIDA');
+        expect(codigos).not.toContain('AREA_CONSERTADA');
+      });
+    });
   });
 
   it('poste com prova (do DXF ou com POSTE no nome): sem POSTE_A_CONFIRMAR', () => {

@@ -143,6 +143,7 @@ const TITULO_AVISO: Record<string, string> = {
   FAIXA_DOMINIO: 'Faixa de domínio',
   FAIXA_SEM_MALHA: 'Malhas de faixa de domínio',
   FAIXA_SEM_FERROVIA: 'Ferrovia não conferida',
+  AREA_CONSERTADA: 'Área com desenho consertado',
 };
 
 function linhasDoAviso(a: Aviso, porque?: string): Filho[] {

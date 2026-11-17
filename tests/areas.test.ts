@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { strToU8 } from 'fflate';
 import { montarZip } from '../src/nucleo/zip.ts';
-import { lerAreasProtegidas, orgaoDaArea, ehAgua, type AreaProtegida } from '../src/nucleo/areas.ts';
+import { lerAreasProtegidas, orgaoDaArea, ehAgua, mudancaDoConserto, TOL_AVISO_CONSERTO, TOL_CONSERTO, type AreaProtegida } from '../src/nucleo/areas.ts';
 import { G } from '../src/nucleo/geom.ts';
 
 const quadrado = (lon: number, lat: number, l = 0.05) =>
@@ -158,6 +158,48 @@ describe('lerAreasProtegidas', () => {
     expect(a.poligonos[0][0]).toHaveLength(9);
     // os polígonos bons não ganham a marca
     expect(base.areas.every((x) => x.defeito === undefined)).toBe(true);
+  });
+
+  // laço pequeno no mesmo sentido do anel (triângulo de 2% do quadrado): o conserto tira a área contada duas vezes,
+  // dentro do limite de 5% mas acima dos 0,5% do aviso
+  const comLacoPequeno = (lon: number, lat: number) => {
+    const p = (x: number, y: number) => `${lon + 0.0005 * x},${lat + 0.0005 * y}`;
+    const anel = [p(0, 0), p(100, 0), p(100, 100), p(50, 100), p(40, 80), p(60, 80), p(50, 100), p(0, 100), p(0, 0)].join(' ');
+    return `<Polygon><outerBoundaryIs><LinearRing><coordinates>${anel}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
+  };
+
+  it('conserto que muda a área entre 0,5% e 5%: área consertada, sem defeito, marcada com consertoGrande', () => {
+    const b = lerAreasProtegidas(kmz(municipios() + pasta('Unidade de Conservação Estadual', placemark('Área Torta', comLacoPequeno(-39, -4)))), NOME);
+    const a = achar(b.areas, 'Área Torta');
+    expect(a.defeito).toBeUndefined();
+    expect(a.poligonos.every((an) => G.valido(G.poligono(an)))).toBe(true);
+    expect(a.consertoGrande).toBeGreaterThan(TOL_AVISO_CONSERTO);
+    expect(a.consertoGrande).toBeLessThanOrEqual(TOL_CONSERTO);
+    expect(a.consertoGrande).toBeCloseTo(0.02 / 1.02, 2); // o laço de 2% contado duas vezes sai
+    expect(a.poligonosConsertados).toEqual([0]);
+  });
+
+  it('área de várias partes: poligonosConsertados aponta só para a parte consertada', () => {
+    const geo = `<MultiGeometry>${poligono(-39.5, -4.5)}${comLacoPequeno(-39, -4)}</MultiGeometry>`;
+    const a = achar(lerAreasProtegidas(kmz(municipios() + pasta('Unidade de Conservação Estadual', placemark('Área Partida', geo))), NOME).areas, 'Área Partida');
+    expect(a.consertoGrande).toBeGreaterThan(TOL_AVISO_CONSERTO);
+    expect(a.poligonosConsertados).toHaveLength(1);
+    const parte = a.poligonos[a.poligonosConsertados![0]];
+    // a parte do laço (a leste), não o quadrado bom de -39,5 (a oeste)
+    expect(Math.min(...parte[0].map((p) => p[0]))).toBeGreaterThan(Math.max(...a.poligonos[0][0].map((p) => p[0])));
+  });
+
+  it('conserto que quase não muda a área (o laço vira furo) e polígono bom: sem consertoGrande', () => {
+    const b = lerAreasProtegidas(kmz(municipios() + pasta('Unidade de Conservação Estadual', placemark('Área Laçada', comLaco(-39, -4, true)))), NOME);
+    expect(achar(b.areas, 'Área Laçada').consertoGrande).toBeUndefined();
+    expect(base.areas.every((x) => x.consertoGrande === undefined)).toBe(true);
+    expect(base.municipios.every((x) => x.consertoGrande === undefined)).toBe(true);
+  });
+
+  it('mudancaDoConserto: fração da área de antes, e zero quando não consertou', () => {
+    expect(mudancaDoConserto({ poligonos: [], consertado: true, defeito: false, areaAntes: 200, areaDepois: 197 })).toBeCloseTo(0.015, 10);
+    expect(mudancaDoConserto({ poligonos: [], consertado: false, defeito: false, areaAntes: 200, areaDepois: 200 })).toBe(0);
+    expect(mudancaDoConserto({ poligonos: [], consertado: false, defeito: true, areaAntes: 200, areaDepois: 150 })).toBe(0);
   });
 
   it('dá o erro exato em KML de rede, sem a pasta de municípios ou com poucos municípios', () => {

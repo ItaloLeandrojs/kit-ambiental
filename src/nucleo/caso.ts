@@ -316,6 +316,31 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
     });
   }
 
+  // área cujo desenho o conserto da leitura mudou além de 0,5%: amarelo quando a rede nova cruza ou passa a até 100 m
+  // do pedaço consertado (`<=`, igual a PROXIMA e APP_POSSIVEL)
+  // (decisão do Italo, 16/11: o pedaço que o conserto tirou fica colado na área). Vale também para água: a APP sai desse desenho.
+  // Se a distância lançar, avisa assim mesmo: aviso a mais, nunca a menos.
+  for (const a of base.areas) {
+    if (a.consertoGrande === undefined || a.defeito || naoConferidas.has(a) || !cruza(a.caixa, caixaPerto)) continue;
+    // mede só até os pedaços consertados; sem a lista (área montada à mão), mede até a área inteira: aviso a mais
+    const pedacos = a.poligonosConsertados
+      ? a.poligonosConsertados.map((i) => a.poligonos[i]).filter((p) => p !== undefined)
+      : a.poligonos;
+    let pertoDaRede: boolean;
+    try {
+      const geos = [...pedacos.filter(aneisValidos).map(poligonoDe), ...(a.poligonosConsertados ? [] : a.linhas.map((l) => G.linha(l)))];
+      pertoDaRede = geos.length > 0 && Math.min(...geos.map(distRede)) <= RAIO_PROXIMA;
+    } catch {
+      pertoDaRede = true;
+    }
+    if (!pertoDaRede) continue;
+    const pct = (100 * a.consertoGrande).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+    avisos.push({
+      nivel: 'amarelo', codigo: 'AREA_CONSERTADA', texto: `${a.nome}: ${TEXTOS.areaConsertada}`,
+      comoCorrigir: `Abra o KMZ e a rede no Google Earth e veja por onde a rede nova passa em "${a.nome}": o site consertou o desenho de uma parte dessa área e essa parte mudou ${pct}% de área. Se a rede passa num pedaço que ficou fora da conta, meça os metros à mão e avise o responsável pelo site.`,
+    });
+  }
+
   for (const nome of naoConferidas.values()) {
     avisos.push({
       nivel: 'vermelho', codigo: 'AREA_NAO_CONFERIDA', texto: `${nome}: ${TEXTOS.areaNaoConferida}`,

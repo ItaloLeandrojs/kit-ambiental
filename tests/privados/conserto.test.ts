@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PRIVADOS } from './caminhos.ts';
-import { ehAgua, lerAreasProtegidas, TOL_CONSERTO, type AreaProtegida, type BaseAreas } from '../../src/nucleo/areas.ts';
+import { ehAgua, lerAreasProtegidas, TOL_AVISO_CONSERTO, TOL_CONSERTO, type AreaProtegida, type BaseAreas } from '../../src/nucleo/areas.ts';
 import { calcularCaso } from '../../src/nucleo/caso.ts';
 import { refazerApp, type AppProposta } from '../../src/nucleo/app.ts';
 import { G } from '../../src/nucleo/geom.ts';
@@ -66,6 +66,18 @@ describe.skipIf(!existsSync(KMZ))('KMZ real: conserto dos polígonos', () => {
       + `inválidos depois: ${todas.filter(invalida).length}; com defeito: ${todas.filter((a) => a.defeito).length}`);
     console.log(`diferença de área nas áreas consertadas: maior ${pct(Math.max(...difs.map(Math.abs)))}, média ${pct(difs.reduce((s, d) => s + Math.abs(d), 0) / difs.length)}, `
       + `${difs.filter((d) => Math.abs(d) < 0.0001).length} de ${difs.length} abaixo de 0,01%; soma das áreas consertadas: ${pct(consertadas.reduce((s, { b }) => s + areaDe(b), 0) / consertadas.reduce((s, { a }) => s + areaDe(a), 0) - 1)}`);
+    // amarelo AREA_CONSERTADA: áreas cujo conserto mudou a área além de 0,5%
+    const marcadas = todas.filter((a) => a.consertoGrande !== undefined);
+    console.log(`marcadas com consertoGrande (> ${pct(TOL_AVISO_CONSERTO)}): ${marcadas.length} áreas (${consertada.areas.filter((a) => a.consertoGrande !== undefined && ehAgua(a) !== null).length} águas, `
+      + `${consertada.municipios.filter((a) => a.consertoGrande !== undefined).length} municípios); maior ${marcadas.length ? pct(Math.max(...marcadas.map((a) => a.consertoGrande!))) : '-'}`);
+    for (const a of marcadas) {
+      expect(a.consertoGrande!).toBeGreaterThan(TOL_AVISO_CONSERTO);
+      expect(a.consertoGrande!).toBeLessThanOrEqual(TOL_CONSERTO);
+      expect(invalida(todasCru[todas.indexOf(a)])).toBe(true); // só polígono que veio inválido ganha a marca
+      // o caso mede só até os pedaços consertados: a lista existe e aponta para polígonos da área
+      expect(a.poligonosConsertados!.length).toBeGreaterThan(0);
+      for (const i of a.poligonosConsertados!) expect(a.poligonos[i]).toBeDefined();
+    }
     expect(todas.filter(invalida)).toHaveLength(0);
     expect(todas.filter((a) => a.defeito)).toHaveLength(0);
     for (const d of difs) expect(Math.abs(d)).toBeLessThanOrEqual(TOL_CONSERTO);
