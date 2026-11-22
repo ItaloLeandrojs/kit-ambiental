@@ -91,6 +91,14 @@ describe('estado: KMZ e projeto', () => {
     expect(r.caso?.intervencoes[0].metros.MT).toBeCloseTo(100, 6);
   });
 
+  it('camada de rede subterrânea trava o kit: bloqueio vermelho e sem caso', async () => {
+    const sub = (a: Pt, b: Pt): Par[] => [[0, 'LINE'], [8, 'REDE MT SUBTERRÂNEA'], [10, a[0]], [20, a[1]], [11, b[0]], [21, b[1]]];
+    const e = await comProjeto(dxf([...lado([500010, 9500050], [500050, 9500050]), ...etiqueta([500030, 9500050]), ...sub([500050, 9500050], [500110, 9500050])]));
+    expect(e.ler().bloqueio?.codigo).toBe('REDE_SUBTERRANEA');
+    expect(e.ler().bloqueio?.comoCorrigir).toContain('REDE MT SUBTERRÂNEA');
+    expect(e.ler().caso).toBeNull();
+  });
+
   it('KML de rede: o nome do arquivo é a pasta de cima e dá o tipo MT', async () => {
     const [lon, lat] = deUtm([500010, 9500050]);
     const [lon2, lat2] = deUtm([500050, 9500050]);

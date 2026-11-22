@@ -13,11 +13,11 @@ import { PORQUE_AVISO } from '../regras/textos.ts';
 import { contaNaRede, ERRO_APP_PENDENTE, ERRO_ARVORE_SEM_PONTO, ERRO_AVISO_VERMELHO, osValida, type AppDoCaso, type Estado, type Retrato } from './estado.ts';
 import { SITUACAO_TEXTO, TIPO_TEXTO } from './mapa.ts';
 
-type Filho = Node | string | null | false | undefined;
+export type Filho = Node | string | null | false | undefined;
 type Attrs = Record<string, string | number | boolean | ((e: Event) => void) | undefined>;
 
 // monta DOM sem innerHTML: nome de arquivo e de área são texto, nunca HTML
-function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs = {}, ...filhos: Filho[]): HTMLElementTagNameMap[K] {
+export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs = {}, ...filhos: Filho[]): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (v === undefined || v === false) continue;
@@ -45,7 +45,7 @@ const AVISOS_ARVORE_NO_CASO = new Set(['ARVORE_CARNAUBA', 'ARVORE_SEM_ESPECIE'])
 const ERRO_M2_TELA = 'Os m² do poste precisam ser um número, zero ou maior.';
 const PRAZO_POSTE = 5; // m: poste que dá nome à ponta do vão
 
-const milhar = (n: number): string => n.toLocaleString('pt-BR');
+export const milhar = (n: number): string => n.toLocaleString('pt-BR');
 const comprimento = (p: Pt[]): number => p.slice(1).reduce((s, q, i) => s + Math.hypot(q[0] - p[i][0], q[1] - p[i][1]), 0);
 
 function posteDa(postes: Poste[], p: Pt): Poste | null {
@@ -74,10 +74,10 @@ export function totaisDaRede(vaos: Vao[]): Record<TipoRede, number> & { semTipo:
   return t;
 }
 
-const lerBytes = async (f: File): Promise<Uint8Array> => new Uint8Array(await f.arrayBuffer());
+export const lerBytes = async (f: File): Promise<Uint8Array> => new Uint8Array(await f.arrayBuffer());
 
 // zona de soltar arquivo; o input escondido também abre pelo teclado
-function zona(texto: string, accept: string, aoEscolher: (f: File) => void, rotulo: string): HTMLElement {
+export function zona(texto: string, accept: string, aoEscolher: (f: File) => void, rotulo: string): HTMLElement {
   const entrada = h('input', { type: 'file', accept, 'aria-label': rotulo, onchange: (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (f) aoEscolher(f);
@@ -98,7 +98,12 @@ function zona(texto: string, accept: string, aoEscolher: (f: File) => void, rotu
 
 // zona de soltar várias fotos de uma vez
 function zonaFotos(texto: string, aoEscolher: (fs: File[]) => void, rotulo: string): HTMLElement {
-  const entrada = h('input', { type: 'file', accept: 'image/*,.jpg,.jpeg,.heic,.heif', multiple: true, 'aria-label': rotulo, onchange: (e) => {
+  return zonaVarios(texto, 'image/*,.jpg,.jpeg,.heic,.heif', aoEscolher, rotulo);
+}
+
+// zona de soltar vários arquivos de uma vez (fotos, imagens das figuras, arquivos do kit)
+export function zonaVarios(texto: Filho, accept: string, aoEscolher: (fs: File[]) => void, rotulo: string): HTMLElement {
+  const entrada = h('input', { type: 'file', accept, multiple: true, 'aria-label': rotulo, onchange: (e) => {
     const fs = [...((e.target as HTMLInputElement).files ?? [])];
     if (fs.length) aoEscolher(fs);
     (e.target as HTMLInputElement).value = '';
@@ -117,12 +122,12 @@ function zonaFotos(texto: string, aoEscolher: (fs: File[]) => void, rotulo: stri
   return z;
 }
 
-function botaoTrocar(accept: string, aoEscolher: (f: File) => void, rotulo: string): HTMLElement {
+export function botaoTrocar(accept: string, aoEscolher: (f: File) => void, rotulo: string, texto = 'trocar'): HTMLElement {
   const entrada = h('input', { type: 'file', accept, 'aria-label': rotulo, class: 'so-leitor', tabindex: -1, style: 'display:none', onchange: (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (f) aoEscolher(f);
   } });
-  return h('span', {}, h('button', { type: 'button', class: 'link', onclick: () => entrada.click() }, 'trocar'), entrada);
+  return h('span', {}, h('button', { type: 'button', class: 'link', onclick: () => entrada.click() }, texto), entrada);
 }
 
 const TITULO_AVISO: Record<string, string> = {
@@ -155,7 +160,7 @@ function linhasDoAviso(a: Aviso, porque?: string): Filho[] {
   ];
 }
 
-function blocoAviso(a: Aviso): HTMLElement {
+export function blocoAviso(a: Aviso): HTMLElement {
   const titulo = a.nivel === 'vermelho' && !a.codigo.startsWith('ARVORE_') ? 'Pare e confira' : (TITULO_AVISO[a.codigo] ?? (a.nivel === 'vermelho' ? 'Pare e confira' : 'Confira'));
   return h('div', { class: `aviso ${a.nivel}`, role: a.nivel === 'vermelho' ? 'alert' : undefined },
     h('h2', {}, titulo, h('span', { class: 'cod' }, a.codigo)),
@@ -195,14 +200,52 @@ function linhaIntervencao(iv: Intervencao, aoMudarM2: (id: string, texto: string
     h('p', { class: 'nota' }, 'Use o nome exatamente assim no memorial.'));
 }
 
+// um item da conferência (verde, amarelo ou vermelho), com o porquê e o como corrigir
+export function itemConferencia(i: ItemConferencia): HTMLElement {
+  return h('div', { class: `item ${i.nivel}` },
+    h('span', { class: 'b' }),
+    h('div', {},
+      h('strong', {}, i.titulo),
+      h('p', {}, i.porque),
+      i.arquivos.length ? h('p', {}, ...i.arquivos.flatMap((a, k) => [k ? ', ' : '', h('code', {}, a)])) : null,
+      i.nivel === 'verde' ? null : h('p', { class: 'como' }, `Como corrigir: ${i.comoCorrigir}`)));
+}
+
 export interface Painel { desenhar(): void }
+
+/** O que o painel de um passo de fora (Parte 2) pode pedir ao painel de passos. */
+export interface ContextoPasso {
+  /** Fecha este passo e abre o seguinte. */
+  seguir(): void;
+  desenhar(): void;
+}
+
+/**
+ * Passos que vêm depois do passo 5, no lugar do 6 (baixar) e do 7 (conferir) da Parte 1.
+ * O painel continua dono da lista: abre só o passo atual, guarda o que a pessoa abriu à mão e o foco.
+ */
+export interface ExtensaoPainel {
+  passos: { id: string; titulo: string }[];
+  /** Texto do botão do passo 5 que leva ao primeiro passo de fora. */
+  seguirDo5: string;
+  corpo(id: string, r: Retrato, ctx: ContextoPasso): Filho[];
+  legenda(id: string, r: Retrato): string;
+  /** Passo que não depende do caso (o conferir um zip): nunca fica travado. */
+  livre?(id: string): boolean;
+  /** Feito sem depender da posição (o conferir, depois de uma conferência); null deixa o painel decidir. */
+  feito?(id: string, r: Retrato): boolean | null;
+}
 
 export interface OpcoesPainel {
   /** Entrega um arquivo ao usuário; nos testes é trocada por um espião. */
   salvar?: (nome: string, conteudo: Uint8Array | string, tipo: string) => void;
+  /** Os passos da Parte 2 (painel-kit.ts). Sem ela, o painel é o da Parte 1, com os passos 1 a 7. */
+  extensao?: ExtensaoPainel;
+  /** Quem avisa que é hora de redesenhar; por padrão, o estado da Parte 1. */
+  ouvir?: (f: () => void) => void;
 }
 
-function salvarNoNavegador(nome: string, conteudo: Uint8Array | string, tipo: string): void {
+export function salvarNoNavegador(nome: string, conteudo: Uint8Array | string, tipo: string): void {
   const url = URL.createObjectURL(new Blob([conteudo as BlobPart], { type: tipo }));
   const a = document.createElement('a');
   a.href = url;
@@ -215,9 +258,17 @@ function salvarNoNavegador(nome: string, conteudo: Uint8Array | string, tipo: st
 
 export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPainel = {}): Painel {
   const salvar = opcoes.salvar ?? salvarNoNavegador;
+  const ext = opcoes.extensao;
+  // a lista de passos por id ('1' a '7' na Parte 1; com a Parte 2, '1' a '5' e depois os dela)
+  const LISTA: { id: string; titulo: string }[] = ext
+    ? [...PASSOS.filter((p) => p.n <= 5).map((p) => ({ id: String(p.n), titulo: p.titulo })), ...ext.passos]
+    : PASSOS.map((p) => ({ id: String(p.n), titulo: p.titulo }));
+  const pos = (id: string): number => LISTA.findIndex((p) => p.id === id);
+  const daExtensao = (id: string): boolean => !!ext && pos(id) > pos('5');
+  const seguinte = (id: string): string => LISTA[pos(id) + 1]?.id ?? id;
   let os = '';
-  let atualAnterior = 0;
-  let avanco = 0; // 5 ou 6: a pessoa já seguiu do passo 3 para o caso (ou para o download)
+  let atualAnterior = '';
+  let avanco = ''; // '4' em diante: a pessoa já seguiu do passo 3 para as árvores, o caso, o download...
   const larguras = new Map<number, string>(); // o que está escrito no campo de largura de cada APP
   let erroM2: string | null = null;
   let ultimaBase: Retrato['base'] = null;
@@ -228,7 +279,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
   let erroConferir: string | null = null;
   let zipLido: { bytes: Uint8Array; nome: string } | null = null;
   let dxfConferir: Uint8Array | null = null;
-  const abertura = new Map<number, boolean>(); // o que a pessoa abriu ou fechou à mão
+  const abertura = new Map<string, boolean>(); // o que a pessoa abriu ou fechou à mão
   let projetoLido: { bytes: Uint8Array; nome: string } | null = null;
   const cartoesArvore = new Map<string, { chave: string; el: HTMLElement }>(); // cartão pronto, reaproveitado enquanto nada nele mudou
   const miniaturas = new Map<string, string>(); // id da árvore -> endereço local da miniatura (nada sai do navegador)
@@ -255,11 +306,11 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     });
   };
 
-  function passoAtual(r: Retrato): number {
-    if (!r.base) return 1;
-    if (!r.rede) return 2;
-    if (!r.caso) return 3;
-    return avanco >= 4 ? avanco : 3;
+  function passoAtual(r: Retrato): string {
+    if (!r.base) return '1';
+    if (!r.rede) return '2';
+    if (!r.caso) return '3';
+    return avanco && pos(avanco) >= pos('4') ? avanco : '3';
   }
 
   function resumoDoPasso(n: number, r: Retrato): string | null {
@@ -427,7 +478,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       ...doCaso.map(blocoAviso),
       h('button', {
         type: 'button', class: 'botao forte', disabled: !r.caso,
-        onclick: () => { avanco = 4; desenhar(); },
+        onclick: () => { avanco = '4'; desenhar(); },
       }, 'Rede confirmada, seguir'),
     ];
   }
@@ -503,7 +554,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
           h('div', { class: 'campos' }, h('button', { type: 'button', class: 'botao mini', onclick: () => estado.removerLimpeza(i) }, 'Tirar'))))),
       ...r.avisosArvores.map(blocoAviso),
       h('p', { class: 'ajuda' }, 'Poda drástica não existe: vira supressão. Com mais de 20 árvores, desenhe a área de limpeza de faixa.'),
-      h('button', { type: 'button', class: 'botao forte', onclick: () => { estado.cancelarModo(); avanco = 5; desenhar(); } }, 'Seguir para o caso'),
+      h('button', { type: 'button', class: 'botao forte', onclick: () => { estado.cancelarModo(); avanco = '5'; desenhar(); } }, 'Seguir para o caso'),
     ];
   }
 
@@ -583,7 +634,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       copia === 'copiado' ? h('p', { class: 'ok', role: 'status' }, 'Resumo copiado.') : null,
       copia === 'falhou' ? h('p', { class: 'amarelo-txt', role: 'status' }, 'Não consegui copiar sozinho. O texto abaixo está selecionado: use Ctrl+C.') : null,
       h('pre', { class: 'resumo-txt' }, texto),
-      h('button', { type: 'button', class: 'botao forte', onclick: () => { avanco = 6; desenhar(); } }, 'Seguir para baixar'),
+      h('button', { type: 'button', class: 'botao forte', onclick: () => { avanco = seguinte('5'); desenhar(); } }, ext ? ext.seguirDo5 : 'Seguir para baixar'),
     ];
   }
 
@@ -625,16 +676,6 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
       erroConferir = e instanceof Error ? e.message : String(e);
     }
     desenhar();
-  }
-
-  function itemConferencia(i: ItemConferencia): HTMLElement {
-    return h('div', { class: `item ${i.nivel}` },
-      h('span', { class: 'b' }),
-      h('div', {},
-        h('strong', {}, i.titulo),
-        h('p', {}, i.porque),
-        i.arquivos.length ? h('p', {}, ...i.arquivos.flatMap((a, k) => [k ? ', ' : '', h('code', {}, a)])) : null,
-        i.nivel === 'verde' ? null : h('p', { class: 'como' }, `Como corrigir: ${i.comoCorrigir}`)));
   }
 
   function passo7(): Filho[] {
@@ -684,37 +725,56 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     return feito ?? (n === 3 ? 'quais vãos são rede nova' : '');
   }
 
+  // o passo da Parte 1 pelo número; os da extensão, pelo painel dela
+  function travado(id: string, r: Retrato): boolean {
+    if (daExtensao(id)) return ext!.livre?.(id) ? false : !r.caso;
+    const n = Number(id);
+    return n === 4 || n === 5 || n === 6 ? !r.caso : n === 3 ? !r.rede : n === 2 ? !r.base : false;
+  }
+  function jaFeito(id: string, r: Retrato, atual: string): boolean {
+    const depois = pos(atual) > pos(id);
+    if (daExtensao(id)) return ext!.feito?.(id, r) ?? depois;
+    const n = Number(id);
+    return (n === 1 && !!r.base) || (n === 2 && !!r.rede) || (n >= 3 && n <= 5 && depois) || (n === 7 && !!conferencia);
+  }
+
   function desenhar() {
     const r = estado.ler();
     const atual = passoAtual(r);
-    if (atual < 3) avanco = 0;
+    if (pos(atual) < pos('3')) avanco = '';
     // outro KMZ ou outro projeto: o que estava escrito nos campos de largura é de outra obra
     if (r.base !== ultimaBase || r.projeto !== ultimoProjeto) { larguras.clear(); ultimaBase = r.base; ultimoProjeto = r.projeto; }
     if (atual !== atualAnterior) { abertura.clear(); atualAnterior = atual; }
 
-    // foco e rolagem sobrevivem ao redesenho (a tabela muda a cada clique)
+    // foco e rolagem sobrevivem ao redesenho (a tabela muda a cada clique; os campos do 5b, a cada letra)
     const ativo = document.activeElement as HTMLElement | null;
     const vaoFocado = ativo?.dataset?.vao ?? null;
     const focoFocado = ativo?.dataset?.foco ?? null;
+    let selecao: [number, number] | null = null;
+    if (ativo instanceof HTMLInputElement || ativo instanceof HTMLTextAreaElement) {
+      try { selecao = ativo.selectionStart === null || ativo.selectionEnd === null ? null : [ativo.selectionStart, ativo.selectionEnd]; } catch { /* campo sem seleção (data) */ }
+    }
     const rolagem = raiz.querySelector('.tabela-rolagem')?.scrollTop ?? 0;
     const rolagemPainel = raiz.scrollTop;
 
-    const lista = PASSOS.map(({ n, titulo }) => {
-      const corpo = corpoDoPasso(n, r);
-      const bloqueado = n === 4 || n === 5 || n === 6 ? !r.caso : n === 3 ? !r.rede : n === 2 ? !r.base : false;
-      const feito = (n === 1 && !!r.base) || (n === 2 && !!r.rede) || (n === 3 && atual > 3) || (n === 4 && atual > 4) || (n === 5 && atual > 5) || (n === 7 && !!conferencia);
-      const aberto = !bloqueado && (abertura.get(n) ?? n === atual);
-      const classe = ['passo', feito ? 'feito' : '', n === atual ? 'atual' : '', bloqueado ? 'bloqueado' : ''].filter(Boolean).join(' ');
+    const lista = LISTA.map(({ id, titulo }) => {
+      const daExt = daExtensao(id);
+      const corpo = daExt ? ext!.corpo(id, r, { seguir: () => { avanco = seguinte(id); desenhar(); }, desenhar }) : corpoDoPasso(Number(id), r);
+      const bloqueado = travado(id, r);
+      const feito = jaFeito(id, r, atual);
+      const aberto = !bloqueado && (abertura.get(id) ?? id === atual);
+      const classe = ['passo', feito ? 'feito' : '', id === atual ? 'atual' : '', bloqueado ? 'bloqueado' : ''].filter(Boolean).join(' ');
       const sumario = h('summary', {
         'aria-disabled': bloqueado ? 'true' : undefined,
+        'data-foco': `passo:${id}`,
         onclick: (e) => {
           e.preventDefault();
           if (bloqueado) return;
-          abertura.set(n, !aberto);
+          abertura.set(id, !aberto);
           desenhar();
         },
-      }, h('span', { class: 'num' }, String(n)), h('span', {}, titulo, h('small', {}, legendaDoPasso(n, r))));
-      const d = h('details', { class: classe }, sumario, aberto ? h('div', { class: 'corpo' }, ...corpo) : null);
+      }, h('span', { class: 'num' }, id), h('span', {}, titulo, h('small', {}, daExt ? ext!.legenda(id, r) : legendaDoPasso(Number(id), r))));
+      const d = h('details', { class: classe, 'data-passo': id }, sumario, aberto ? h('div', { class: 'corpo' }, ...corpo) : null);
       if (aberto) d.setAttribute('open', '');
       return d;
     });
@@ -723,7 +783,16 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     const tab = raiz.querySelector('.tabela-rolagem');
     if (tab) tab.scrollTop = rolagem;
     if (vaoFocado) raiz.querySelector<HTMLElement>(`[data-vao="${CSS.escape(vaoFocado)}"]`)?.focus();
-    if (focoFocado) raiz.querySelector<HTMLElement>(`[data-foco="${CSS.escape(focoFocado)}"]`)?.focus();
+    if (focoFocado) {
+      const alvo = raiz.querySelector<HTMLElement>(`[data-foco="${CSS.escape(focoFocado)}"]`);
+      if (alvo && alvo !== document.activeElement) {
+        alvo.focus({ preventScroll: true });
+        // o cursor do campo volta para onde estava (digitar uma letra redesenha o painel)
+        if (selecao && (alvo instanceof HTMLInputElement || alvo instanceof HTMLTextAreaElement)) {
+          try { alvo.setSelectionRange(selecao[0], selecao[1]); } catch { /* campo sem seleção */ }
+        }
+      }
+    }
     if (copia === 'falhou') {
       // sem área de transferência: deixa o resumo selecionado para Ctrl+C
       const pre = raiz.querySelector('.resumo-txt');
@@ -738,7 +807,7 @@ export function criarPainel(raiz: HTMLElement, estado: Estado, opcoes: OpcoesPai
     }
   }
 
-  estado.aoMudar(desenhar);
+  (opcoes.ouvir ?? ((f: () => void) => { estado.aoMudar(f); }))(desenhar);
   desenhar();
   return { desenhar };
 }

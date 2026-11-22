@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="description" content="Rascunho estático dos passos da Parte 2 do Kit Ambiental, com dados inventados.">
+<title>Kit Ambiental · rascunho da Parte 2</title>
+<style>
+/* ===== cópia de src/tela/estilo.css (mesmo :root e mesmos componentes da Parte 1) ===== */
+:root {
+  --fundo: #15191e;
+  --painel: #1b2026;
+  --superficie: #232a32;
+  --superficie-2: #2b333d;
+  --linha: #2f3741;
+  --linha-forte: #3d4753;
+  --texto: #e6eaee;
+  --texto-2: #aab3bd;
+  --texto-3: #8a949f;
+  --amarelo: #f3c42f;
+  --amarelo-escuro: #d9ab17;
+  --amarelo-fundo: rgba(243, 196, 47, .12);
+  --cad: #1f2933;
+  --raio: 4px;
+  --fonte: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --fonte-titulo: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --fonte-dado: "Cascadia Mono", Consolas, "Courier New", monospace;
+  /* cores extras do rascunho: só estado e camadas do mapa */
+  --verde: #4cc38a;
+  --verde-fundo: rgba(76, 195, 138, .12);
+  --vermelho: #ff6b6b;
+  --vermelho-fundo: rgba(255, 107, 107, .12);
+  --mt: #ff5d5d;
+  --bt: #3f8f2a;   /* BT verde, como na figura (era #4cc9f0) */
+  --conj: #4cc9f0; /* conjugada azul, como na figura (era #e879f9) */
+  --existente: #7c8793;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--fonte); font-size: 14px; line-height: 1.45;
+  color: var(--texto); background: var(--fundo);
+  display: grid; grid-template-columns: 340px minmax(0, 1fr);
+}
+::selection { background: var(--amarelo); color: #15191e; }
+:focus-visible { outline: 2px solid var(--amarelo); outline-offset: 2px; }
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-thumb { background: var(--linha-forte); border-radius: 10px; border: 3px solid var(--painel); }
+::-webkit-scrollbar-track { background: transparent; }
+abbr[title] { text-decoration: underline dotted var(--texto-3); text-underline-offset: 3px; cursor: help; }
+code { font-family: var(--fonte-dado); font-size: 12.5px; color: var(--texto-2); }
+p { margin: 0; }
+
+/* Painel */
+.painel { background: var(--painel); border-right: 1px solid var(--linha); display: grid; grid-template-rows: auto 1fr; min-height: 0; height: 100vh; }
+.cabeca { padding: 18px 20px 14px; border-bottom: 1px solid var(--linha); }
+.cabeca h1 { font-family: var(--fonte-titulo); font-size: 18px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+.cabeca p { margin-top: 2px; color: var(--texto-3); font-size: 12.5px; }
+.selo { display: inline-block; margin-top: 8px; padding: 1px 8px; font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--amarelo); border: 1px solid rgba(243,196,47,.45); border-radius: 999px; }
+
+.passos { overflow-y: auto; padding: 0 20px 24px; }
+.passo { border-bottom: 1px solid var(--linha); }
+.passo > summary {
+  list-style: none; cursor: pointer; padding: 14px 0; display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center;
+  font-size: 13.5px; font-weight: 600;
+}
+.passo > summary::-webkit-details-marker { display: none; }
+.passo > summary::after { content: "+"; color: var(--texto-3); font-weight: 400; font-size: 16px; }
+.passo[open] > summary::after { content: "\2212"; }
+.num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--superficie-2); color: var(--texto-2); }
+.passo.feito .num { background: var(--verde-fundo); color: var(--verde); }
+.passo.atual .num { background: var(--amarelo); color: #15191e; }
+.passo > summary small { display: block; font-weight: 400; color: var(--texto-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.corpo { padding: 0 0 16px 34px; display: grid; gap: 10px; }
+.ajuda { color: var(--texto-3); font-size: 12.5px; }
+.ajuda strong { color: var(--texto-2); font-weight: 600; }
+
+.link { background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--amarelo); cursor: pointer; }
+.link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.botao { height: 36px; padding: 0 14px; font: inherit; font-size: 13px; font-weight: 600; color: var(--texto); background: var(--superficie); border: 1px solid var(--linha-forte); border-radius: var(--raio); cursor: pointer; }
+.botao:hover { background: var(--superficie-2); }
+.botao.forte { color: #15191e; background: var(--amarelo); border-color: var(--amarelo); font-weight: 700; }
+.botao.forte:hover { background: var(--amarelo-escuro); }
+.botao.grande { width: 100%; height: 46px; font-size: 15px; font-weight: 700; }
+.botao.mini { height: 28px; padding: 0 10px; font-size: 12px; }
+
+.arquivo { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 10px 12px; background: var(--superficie); border-radius: var(--raio); }
+.arquivo .nome { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.arquivo .det { color: var(--texto-3); font-size: 12px; }
+.campo { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; }
+.campo label { color: var(--texto-3); font-size: 12px; }
+.campo input { width: 100%; height: 34px; padding: 0 10px; text-align: right; font-family: var(--fonte-dado); font-size: 13px; color: var(--texto); background: var(--superficie); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
+.ok { color: var(--verde); font-size: 12.5px; }
+
+/* Tabela de vãos */
+table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--texto-3); padding: 4px 4px 6px 0; border-bottom: 1px solid var(--linha-forte); }
+td { padding: 6px 4px 6px 0; border-bottom: 1px solid var(--linha); vertical-align: middle; }
+td.n, th.n { text-align: right; padding-right: 0; }
+tfoot td { border-bottom: 0; color: var(--texto-2); font-weight: 600; padding-top: 8px; }
+.tipo { display: inline-block; min-width: 38px; text-align: center; padding: 0 6px; border-radius: 3px; font-size: 11px; font-weight: 700; color: #15191e; }
+.tipo.mt { background: var(--mt); }
+.tipo.bt { background: var(--bt); }
+.tipo.conj { background: var(--conj); }
+.tipo.fora { background: var(--existente); }
+.sit { color: var(--texto-2); }
+.legenda { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--texto-2); }
+.legenda i { display: inline-block; width: 16px; height: 0; border-top-width: 3px; border-top-style: solid; vertical-align: middle; margin-right: 5px; }
+
+/* Avisos */
+.aviso { border-radius: var(--raio); padding: 10px 12px; border: 1px solid; display: grid; gap: 6px; font-size: 12.5px; }
+.aviso.amarelo { background: var(--amarelo-fundo); border-color: rgba(243,196,47,.4); }
+.aviso.vermelho { background: var(--vermelho-fundo); border-color: rgba(255,107,107,.45); }
+.aviso h2 { margin: 0; font-size: 13px; font-weight: 700; display: flex; gap: 8px; align-items: baseline; }
+.aviso.amarelo h2 { color: var(--amarelo); }
+.aviso.vermelho h2 { color: var(--vermelho); }
+.aviso .cod { margin-left: auto; font-family: var(--fonte-dado); font-size: 10.5px; font-weight: 400; color: var(--texto-2); }
+.aviso dl { margin: 0; display: grid; grid-template-columns: 74px 1fr; gap: 3px 8px; }
+.aviso dt { color: var(--texto-2); font-size: 11.5px; padding-top: 1px; }
+.aviso dd { margin: 0; color: var(--texto); }
+.aviso .acoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.aviso label.confirma { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.aviso .larg { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--texto-2); }
+.aviso .larg input { width: 64px; height: 28px; text-align: right; padding: 0 6px; font-family: var(--fonte-dado); font-size: 12px; color: var(--texto); background: var(--superficie); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
+
+/* Árvores */
+.soltar { display: grid; place-items: center; text-align: center; padding: 14px; border: 1px dashed var(--linha-forte); border-radius: var(--raio); background: var(--superficie); color: var(--texto-2); font-size: 12.5px; }
+.arvore { display: grid; grid-template-columns: 44px 1fr; gap: 10px; padding: 8px; background: var(--superficie); border-radius: var(--raio); align-items: start; }
+.foto { width: 44px; height: 44px; border-radius: 3px; background: linear-gradient(160deg, #3f6b4a, #1f3a2a 60%, #6d5a3a); }
+.foto.sem { background: repeating-linear-gradient(45deg, var(--superficie-2) 0 6px, var(--linha) 6px 12px); display: grid; place-items: center; font-size: 10px; color: var(--texto-3); }
+.arvore .t { font-weight: 600; font-size: 13px; }
+.arvore .l { color: var(--texto-3); font-size: 12px; }
+.arvore .interv { display: inline-block; margin-top: 3px; padding: 0 8px; font-size: 11.5px; font-weight: 600; border-radius: 999px; border: 1px solid var(--linha-forte); color: var(--texto-2); }
+.arvore .interv.sup { color: var(--vermelho); border-color: rgba(255,107,107,.45); }
+.arvore .interv.poda { color: var(--verde); border-color: rgba(76,195,138,.45); }
+
+/* Cartões do caso */
+.resumo-topo { display: flex; gap: 8px; flex-wrap: wrap; }
+.pilula { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--linha-forte); color: var(--texto-2); }
+.pilula.am { color: var(--amarelo); border-color: rgba(243,196,47,.45); background: var(--amarelo-fundo); }
+.cartao { background: var(--superficie); border-radius: var(--raio); padding: 12px; display: grid; gap: 8px; border-left: 3px solid var(--verde); }
+.cartao.atencao { border-left-color: var(--amarelo); }
+.cartao h2 { margin: 0; font-size: 14px; font-weight: 700; }
+.cartao .tipo-area { color: var(--texto-3); font-size: 12px; }
+.cartao .orgaos { display: grid; gap: 2px; padding: 8px 10px; background: var(--painel); border-radius: var(--raio); font-size: 12.5px; }
+.cartao .orgaos b { color: var(--amarelo); font-weight: 700; }
+.cartao .nota { color: var(--texto-3); font-size: 12px; }
+.cartao .nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+.cartao .nums div { background: var(--painel); border-radius: var(--raio); padding: 6px 2px; }
+.cartao .nums b { display: block; font-family: var(--fonte-dado); font-size: 13px; font-variant-numeric: tabular-nums; }
+.cartao .nums span { font-size: 11px; color: var(--texto-3); }
+.cartao .ha { font-size: 12.5px; color: var(--texto-2); }
+.cartao .ha b { color: var(--texto); font-family: var(--fonte-dado); }
+.cartao .entre { font-size: 12px; color: var(--texto-3); }
+.resumo-txt { font-family: var(--fonte-dado); font-size: 11.5px; line-height: 1.5; color: var(--texto-2); background: var(--painel); border: 1px solid var(--linha); border-radius: var(--raio); padding: 8px 10px; white-space: pre-wrap; margin: 0; }
+
+/* Conferência */
+.item { display: grid; grid-template-columns: 18px 1fr; gap: 8px; padding: 8px 10px; border-radius: var(--raio); font-size: 12.5px; border: 1px solid; }
+.item .b { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; }
+.item.vermelho { background: var(--vermelho-fundo); border-color: rgba(255,107,107,.45); }
+.item.vermelho .b { background: var(--vermelho); }
+.item.amarelo { background: var(--amarelo-fundo); border-color: rgba(243,196,47,.4); }
+.item.amarelo .b { background: var(--amarelo); }
+.item.verde { background: var(--verde-fundo); border-color: rgba(76,195,138,.35); }
+.item.verde .b { background: var(--verde); }
+.item strong { display: block; font-weight: 700; }
+.item .como { color: var(--texto-2); margin-top: 2px; }
+.item code { overflow-wrap: anywhere; }
+
+/* Mapa */
+.previa { position: relative; background: var(--cad); height: 100vh; overflow: hidden; display: grid; grid-template-rows: 1fr 32px; }
+.palco { position: relative; min-height: 0; }
+.palco > svg.mapa { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; user-select: none; }
+.palco > svg.mapa:active { cursor: grabbing; }
+.ferramentas { position: absolute; top: 14px; left: 16px; display: flex; gap: 8px; }
+.ferramentas .botao { background: rgba(27,32,38,.92); }
+.camadas { position: absolute; top: 14px; right: 16px; background: rgba(27,32,38,.92); border: 1px solid var(--linha-forte); border-radius: var(--raio); padding: 10px 12px; display: grid; gap: 5px; font-size: 12px; color: var(--texto-2); }
+.camadas h2 { margin: 0 0 2px; font-size: 12px; font-weight: 600; color: var(--texto); }
+.camadas .l { display: flex; align-items: center; gap: 8px; }
+.camadas .l i { width: 18px; height: 0; border-top-width: 3px; border-top-style: solid; }
+.camadas .l i.area { width: 14px; height: 10px; border: 1.5px solid; border-radius: 2px; }
+.status { display: flex; align-items: center; gap: 18px; padding: 0 16px; background: var(--painel); border-top: 1px solid var(--linha); font-size: 12px; color: var(--texto-3); font-variant-numeric: tabular-nums; overflow: hidden; white-space: nowrap; }
+.status b { color: var(--texto-2); font-weight: 600; }
+.status .dir { margin-left: auto; }
+
+.c-mt { border-color: var(--mt); } .c-bt { border-color: var(--bt); } .c-conj { border-color: var(--conj); } .c-ex { border-color: var(--existente); }
+.c-area { border-color: #5fbf8f; } .c-agua { border-color: #4f8fd6; } .c-app { border-color: var(--amarelo); border-style: dashed; }
+tfoot td.sub { padding-top: 0; font-weight: 400; }
+.folga { margin-top: 4px; }
+svg text { font-family: var(--fonte-dado); }
+
+/* Mapa: tudo em pixels (vector-effect), nunca em metros */
+svg.mapa * { vector-effect: non-scaling-stroke; }
+svg.mapa .estrada { fill: none; stroke: #38424d; stroke-width: 1.5px; pointer-events: none; }
+svg.mapa .estrada.motorway, svg.mapa .estrada.trunk, svg.mapa .estrada.primary { stroke-width: 2.5px; }
+svg.mapa .area { fill: rgba(95,191,143,.14); stroke: #5fbf8f; stroke-width: 1.5px; pointer-events: none; }
+svg.mapa .area.agua { fill: rgba(79,143,214,.3); stroke: #4f8fd6; }
+svg.mapa .area.linha { fill: none; stroke-width: 2px; }
+svg.mapa .vao { fill: none; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+svg.mapa .vao.mt { stroke: var(--mt); }
+svg.mapa .vao.bt { stroke: var(--bt); stroke-width: 2.5px; }
+svg.mapa .vao.conj { stroke: var(--conj); }
+svg.mapa .vao.fora { stroke: var(--existente); stroke-width: 1.5px; }
+svg.mapa .vao.sem-tipo { stroke: var(--amarelo); stroke-width: 3px; stroke-dasharray: 6 4; }
+svg.mapa .toque { fill: none; stroke: transparent; stroke-width: 14px; pointer-events: stroke; cursor: pointer; }
+svg.mapa .toque:hover { stroke: rgba(255,255,255,.12); }
+svg.mapa .poste { fill: none; stroke: var(--texto-2); stroke-width: 6px; stroke-linecap: round; }
+svg.mapa .poste.novo { stroke: var(--texto); stroke-width: 8px; stroke-linecap: square; }
+svg.mapa .poste.a-confirmar { stroke: var(--amarelo); stroke-width: 11px; stroke-linecap: round; }
+
+/* Passos de verdade */
+.passo.bloqueado > summary { cursor: not-allowed; color: var(--texto-3); }
+.passo.bloqueado > summary::after { content: ""; }
+.soltar.sobre { border-color: var(--amarelo); color: var(--texto); }
+.soltar input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.soltar { position: relative; cursor: pointer; }
+.campo input.invalido { border-color: var(--vermelho); }
+.erro { color: var(--vermelho); font-size: 12.5px; padding: 8px 10px; border: 1px solid rgba(255,107,107,.45); background: var(--vermelho-fundo); border-radius: var(--raio); }
+.amarelo-txt { color: var(--amarelo); font-size: 12.5px; }
+.tipo.sem { background: var(--amarelo); }
+tr.vao-linha .ciclo { cursor: pointer; background: none; border: 0; padding: 0; font: inherit; color: inherit; }
+tr.vao-linha .ciclo:hover .tipo { filter: brightness(1.15); }
+tr.fora-da-conta td { color: var(--texto-3); }
+tr.sem-tipo td { background: var(--amarelo-fundo); }
+.camadas-extra { display: grid; gap: 6px; }
+.camadas-extra .linha { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--texto-2); }
+.camadas-extra .linha code { flex: 1; overflow-wrap: anywhere; }
+.status .ocupado { color: var(--amarelo); font-weight: 600; }
+.camadas .l i.poste { width: 8px; height: 8px; border: 2px solid var(--texto); }
+.camadas .l i.semtipo { border-top-style: dashed; border-color: var(--amarelo); }
+.creditos { color: var(--texto-3); font-size: 11px; }
+
+.tabela-rolagem { max-height: 320px; overflow: auto; }
+.tabela-rolagem thead th { position: sticky; top: 0; background: var(--painel); }
+.confirma-solta { display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 12.5px; padding: 8px 0 0; }
+.soltar:focus-within { outline: 2px solid var(--amarelo); outline-offset: 2px; }
+.bloco-bloqueio { display: grid; gap: 4px; }
+
+/* APP proposta e confirmada */
+svg.mapa .app { fill: rgba(243,196,47,.10); stroke: var(--amarelo); stroke-width: 1.5px; stroke-dasharray: 6 4; pointer-events: none; }
+svg.mapa .app.confirmada { fill: rgba(243,196,47,.22); stroke-dasharray: none; }
+.aviso .acoes { margin-top: 2px; }
+.aviso .nota { color: var(--texto-2); font-size: 12px; margin: 0; }
+.aviso .erro { margin: 0; }
+.botao:disabled { opacity: .45; cursor: not-allowed; }
+.botao:disabled:hover { background: var(--superficie); }
+.botao.forte:disabled:hover { background: var(--amarelo); }
+.item p { margin: 2px 0 0; }
+.cartao .larg { display: inline-flex; align-items: center; gap: 6px; }
+.cartao .larg input { width: 64px; height: 28px; text-align: right; padding: 0 6px; font-family: var(--fonte-dado); font-size: 12px; color: var(--texto); background: var(--painel); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
+.corpo > .botao { justify-self: start; }
+.corpo > .botao.grande { justify-self: stretch; }
+
+/* Árvores: miniatura local, mapa em modo de clique */
+.arvore { position: relative; }
+.arvore .foto { overflow: hidden; background-size: cover; background-position: center; }
+.arvore .foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.arvore .campos { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.arvore .campos input[type="text"], .arvore .campos select { height: 28px; padding: 0 6px; font: inherit; font-size: 12px; color: var(--texto); background: var(--painel); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
+.arvore .campos input[type="text"] { width: 130px; }
+.arvore .nota { color: var(--texto-3); font-size: 12px; margin: 4px 0 0; }
+.arvore .nota.am { color: var(--amarelo); }
+.arvore .l.verm { color: var(--vermelho); }
+.arvores-lista { display: grid; gap: 8px; }
+.palco > svg.mapa.clicando { cursor: crosshair; }
+.palco > svg.mapa.clicando:active { cursor: crosshair; }
+svg.mapa .arvore-ponto { fill: none; stroke: var(--verde); stroke-width: 9px; stroke-linecap: round; pointer-events: none; }
+svg.mapa .arvore-ponto.rascunho { stroke-width: 5px; }
+svg.mapa .arvore-ponto.supressao { stroke: var(--vermelho); }
+svg.mapa .limpeza { fill: rgba(76,195,138,.16); stroke: var(--verde); stroke-width: 1.5px; pointer-events: none; }
+svg.mapa .limpeza.rascunho { fill: none; stroke-dasharray: 5 3; }
+.avisos-modo { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.status .aviso-barra { color: var(--amarelo); font-weight: 600; }
+
+/* ===== acréscimos da Parte 2: só composição, com os mesmos tokens ===== */
+[hidden] { display: none !important; }
+.passo-parte1 > summary { padding: 10px 0; }
+
+/* Caso salvo, no topo do painel */
+.caso-salvo { display: flex; gap: 4px 12px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.caso-salvo .ajuda { flex-basis: 100%; }
+.cabeca .aviso { margin-top: 10px; }
+.acoes-linha { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Troca de exemplo: só existe no rascunho (tracejado, como o quadro de exemplo da Parte 1) */
+.troca-exemplo { margin: 0; padding: 6px 10px 8px; border: 1px dashed var(--linha-forte); border-radius: var(--raio); display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--texto-2); }
+.troca-exemplo legend { padding: 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
+.troca-exemplo label { display: inline-flex; gap: 6px; align-items: center; min-height: 28px; cursor: pointer; }
+input[type="radio"], input[type="checkbox"] { accent-color: var(--amarelo); margin: 0; width: 16px; height: 16px; }
+
+/* Seções que fecham dentro de um passo (como os passos) */
+.secao { border: 1px solid var(--linha); border-radius: var(--raio); background: var(--painel); }
+.secao > summary { list-style: none; cursor: pointer; padding: 9px 10px; display: grid; grid-template-columns: 1fr auto 12px; gap: 8px; align-items: center; font-size: 13px; font-weight: 600; }
+.secao > summary::-webkit-details-marker { display: none; }
+.secao > summary::after { content: "+"; color: var(--texto-3); font-weight: 400; font-size: 15px; text-align: right; }
+.secao[open] > summary::after { content: "\2212"; }
+.secao > summary small { display: block; font-weight: 400; color: var(--texto-3); font-size: 12px; overflow-wrap: anywhere; }
+.secao > summary .pilula { font-size: 11px; padding: 0 8px; white-space: nowrap; }
+.secao .dentro { padding: 2px 10px 12px; display: grid; gap: 10px; border-top: 1px solid var(--linha); padding-top: 10px; }
+.pilula.ok { color: var(--verde); border-color: rgba(76,195,138,.45); }
+.pilula.verm { color: var(--vermelho); border-color: rgba(255,107,107,.55); }
+
+/* Campos em coluna (o painel é estreito: rótulo em cima) */
+.cx { display: grid; gap: 4px; }
+.cx > label, .cx > .rot { color: var(--texto-2); font-size: 12px; }
+.cx input[type="text"], .cx input[type="date"], .cx select, .cx textarea, .postes input, .postes select {
+  width: 100%; height: 34px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--texto);
+  background: var(--superficie); border: 1px solid var(--linha-forte); border-radius: var(--raio);
+}
+.cx textarea { height: auto; min-height: 84px; padding: 8px 10px; line-height: 1.45; resize: vertical; }
+.cx input.dado { font-family: var(--fonte-dado); }
+.cx input:read-only { color: var(--texto-2); }
+.cx .nota { color: var(--texto-3); font-size: 12px; }
+.duas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.opcoes { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.opcoes label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+fieldset.cx { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.cx > legend { padding: 0; margin-bottom: 4px; color: var(--texto-2); font-size: 12px; }
+
+/* Postes por tipo */
+.postes { width: 100%; }
+.postes td { padding: 4px 6px 4px 0; }
+.postes th { text-align: right; padding-right: 6px; }
+.postes input { height: 30px; padding: 0 6px; text-align: right; font-family: var(--fonte-dado); font-size: 12px; }
+.postes tfoot td { padding-top: 6px; }
+.postes .bate { color: var(--vermelho); }
+
+/* UC */
+.cand { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: start; padding: 9px 10px; background: var(--superficie); border: 1px solid transparent; border-radius: var(--raio); cursor: pointer; }
+.cand:has(input:checked) { border-color: rgba(243,196,47,.55); }
+.cand input { margin-top: 3px; }
+.cand .nome { display: block; font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.cand .det { display: block; color: var(--texto-3); font-size: 12px; }
+.cand .marca { font-family: var(--fonte-dado); font-size: 11px; font-weight: 700; color: var(--amarelo); }
+.linha-dl { margin: 0; display: grid; grid-template-columns: 92px 1fr; gap: 4px 8px; font-size: 12.5px; }
+.linha-dl dt { color: var(--texto-2); }
+.linha-dl dd { margin: 0; }
+.linha-dl dd b { font-family: var(--fonte-dado); font-weight: 600; }
+
+/* Guardado neste computador */
+.guardado { display: grid; gap: 8px; }
+.guardado .arquivo { grid-template-columns: 1fr auto; align-items: start; }
+.guardado .acoes { display: flex; gap: 8px; }
+.assin { width: 96px; height: 32px; border-radius: 3px; background: #e6eaee; display: grid; place-items: center; }
+.assin svg { width: 84px; height: 24px; }
+
+/* Baixar */
+.baixa { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 12px; background: var(--superficie); border-radius: var(--raio); }
+.baixa .nome { font-weight: 600; font-size: 13px; }
+.baixa .det { grid-column: 1 / -1; color: var(--texto-3); font-size: 12px; }
+.baixa code { font-size: 11.5px; overflow-wrap: anywhere; grid-column: 1 / -1; }
+.baixa .selos { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.baixa .selos .pilula { font-size: 11px; padding: 0 8px; }
+.grupo { display: grid; gap: 8px; }
+
+/* Figuras */
+.fig { display: grid; grid-template-columns: 44px 1fr; gap: 10px; padding: 8px; background: var(--superficie); border-radius: var(--raio); border: 1px solid transparent; }
+.fig.falta { border-color: rgba(243,196,47,.4); background: var(--amarelo-fundo); }
+.fig .t { font-weight: 600; font-size: 13px; }
+.fig .leg { color: var(--texto-3); font-size: 12px; }
+.fig.falta .leg { color: var(--texto-2); }
+.fig .de { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--texto-2); }
+.fig .de select { height: 28px; max-width: 100%; padding: 0 6px; font: inherit; font-size: 12px; color: var(--texto); background: var(--painel); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
+.fig .como-achou { font-size: 11.5px; color: var(--texto-2); }
+.foto.vazia { background: repeating-linear-gradient(45deg, var(--superficie-2) 0 6px, var(--linha) 6px 12px); }
+.foto.sat { background: linear-gradient(150deg, #4a5a3c, #2f3b2a 45%, #6b6248 75%, #3c4a52); position: relative; }
+.recusada { display: grid; grid-template-columns: 1fr; gap: 2px; padding: 8px 10px; border: 1px solid rgba(255,107,107,.45); background: var(--vermelho-fundo); border-radius: var(--raio); font-size: 12.5px; }
+.recusada code { color: var(--texto); }
+
+/* Montar o kit */
+.solto { display: grid; gap: 6px; padding: 9px 10px; background: var(--superficie); border-radius: var(--raio); border: 1px solid transparent; }
+.solto.sem-papel { border-color: rgba(255,107,107,.55); background: var(--vermelho-fundo); }
+.solto .orig { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.solto .papel { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--texto-2); }
+.solto .papel select { height: 28px; padding: 0 6px; font: inherit; font-size: 12px; color: var(--texto); background: var(--painel); border: 1px solid var(--linha-forte); border-radius: var(--raio); }
+.solto .vai { font-size: 12px; color: var(--texto-3); }
+.solto .vai code { font-size: 11.5px; color: var(--texto-2); overflow-wrap: anywhere; }
+.solto .aviso-papel { color: var(--vermelho); font-size: 12px; font-weight: 600; }
+.cabeca-lista { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--texto-2); }
+.lista { display: grid; gap: 6px; }
+
+/* Mapa do rascunho */
+.palco > svg.mapa { cursor: default; }
+.palco > svg.mapa.clicando { cursor: crosshair; }
+.ferramentas .botao.ativo { border-color: var(--amarelo); color: var(--amarelo); }
+.camadas .l i.uc-escolhida { width: 10px; height: 10px; margin: 0 4px; border: 0; background: var(--amarelo); transform: rotate(45deg); }
+.camadas .l i.uc-outra { width: 12px; height: 12px; margin: 0 3px; border: 2px solid var(--texto); border-radius: 50%; }
+/* as legendas só definem largura e estilo do traço (não a cor): assim .c-mt, .c-bt e .c-conj mandam na cor */
+.camadas .l i.c-area { border-color: #5fbf8f; } .camadas .l i.c-app { border-color: var(--amarelo); background: rgba(243,196,47,.22); }
+
+/* Só computador (1280 a 1920 px): sem layout de celular */
+</style>
+</head>
+<body>
+
+<aside class="painel" aria-label="Passos do kit ambiental">
+  <header class="cabeca">
+    <h1>Kit Ambiental</h1>
+    <p>Diz se a obra precisa de processo ambiental, monta o kit e confere o zip.</p>
+    <span class="selo">RASCUNHO · Parte 2 · dados inventados</span>
+
+    <!-- provisório: lugar e textos do caso salvo -->
+    <div class="caso-salvo">
+      <button type="button" class="link">Salvar o caso</button>
+      <button type="button" class="link" data-acao="abrir-caso">Abrir caso salvo</button>
+      <p class="ajuda">Guarda num arquivo <code>.kitambiental</code> o que você digitou, a UC, as árvores e as marcas da rede. Nada vai para a internet.</p>
+    </div>
+    <div class="aviso amarelo" id="aviso-caso" hidden>
+      <h2>Caso salvo com outro projeto <span class="cod">CASO_OUTRO_PROJETO</span></h2>
+      <dl>
+        <dt>O que é</dt><dd>Este caso foi salvo com outro arquivo de projeto; confira a rede.</dd>
+        <!-- provisório -->
+        <dt>Por que importa</dt><dd>Se o desenho mudou depois que o caso foi salvo, as marcas da rede podem não bater mais, e os metros do kit saem errados.</dd>
+        <dt>O que fazer</dt><dd>O projeto aberto não é o mesmo arquivo de quando o caso foi salvo. Confira no mapa as marcas da rede, as APPs e as árvores antes de baixar.</dd>
+      </dl>
+    </div>
+  </header>
+
+  <div class="passos">
+
+    <!-- Parte 1: fechados, já feitos -->
+    <details class="passo feito passo-parte1">
+      <summary><span class="num">1</span><span>KMZ de Áreas Protegidas<small>Rev. 37 · guardado neste computador</small></span></summary>
+      <div class="corpo"><p class="ajuda">Igual à Parte 1.</p></div>
+    </details>
+    <details class="passo feito passo-parte1">
+      <summary><span class="num">2</span><span>Projeto<small>OS 0000000001 · obra-exemplo.dxf</small></span></summary>
+      <div class="corpo"><p class="ajuda">Igual à Parte 1.</p></div>
+    </details>
+    <details class="passo feito passo-parte1">
+      <summary><span class="num">3</span><span>Confirmar a rede<small>MT 547 m · BT 125 m · conjugada 130 m</small></span></summary>
+      <div class="corpo"><p class="ajuda">Igual à Parte 1.</p></div>
+    </details>
+    <details class="passo feito passo-parte1">
+      <summary><span class="num">4</span><span>Árvores<small>2 com poda simples</small></span></summary>
+      <div class="corpo"><p class="ajuda">Igual à Parte 1.</p></div>
+    </details>
+    <details class="passo feito passo-parte1">
+      <summary><span class="num">5</span><span>O caso<small>APA Exemplo e APP do Açude Exemplo</small></span></summary>
+      <div class="corpo"><p class="ajuda">Igual à Parte 1.</p></div>
+    </details>
+
+    <!-- ================= 5a UC ================= -->
+    <details class="passo feito" open>
+      <summary><span class="num">5a</span><span>UC do cliente<small>o ponto que o memorial e a planilha citam</small></span></summary>
+      <div class="corpo">
+        <fieldset class="troca-exemplo" data-grupo="uc">
+          <legend>Ver no rascunho</legend>
+          <label><input type="radio" name="ex-uc" value="varias" checked> Achou 2 no DXF</label>
+          <label><input type="radio" name="ex-uc" value="confirmada"> UC confirmada</label>
+          <label><input type="radio" name="ex-uc" value="nenhuma"> Nenhuma (ou KML)</label>
+        </fieldset>
+
+        <p class="ajuda">A <abbr title="UC: unidade consumidora, o padrão de entrada do cliente">UC</abbr> é o ponto do cliente. O memorial diz se ela está dentro de cada área, e o assunto da planilha muda com isso.</p>
+
+        <div data-ex="uc:varias">
+          <div class="grupo">
+            <p class="ajuda"><strong>O site achou 2 blocos de UC no desenho.</strong> Escolha a do solicitante. As outras não mudam o assunto.</p><!-- provisório -->
+            <label class="cand"><input type="radio" name="uc" checked>
+              <span><span class="nome">UC À IMPLANTAR</span><span class="det">camada UC_NOVA · a 12 m da rede nova</span></span>
+              <span class="marca">UC 1</span></label>
+            <label class="cand"><input type="radio" name="uc">
+              <span><span class="nome">PADRÃO MONOFÁSICO A IMPLANTAR</span><span class="det">camada PADRAO · a 140 m da rede nova</span></span>
+              <span class="marca">UC 2</span></label>
+            <div class="acoes-linha">
+              <button type="button" class="botao forte" data-ir="uc:confirmada">Confirmar a UC 1</button>
+              <button type="button" class="link" data-acao="marcar">Marcar no mapa</button>
+            </div>
+          </div>
+        </div>
+
+        <div data-ex="uc:nenhuma" hidden>
+          <div class="aviso amarelo">
+            <h2>UC não achada no desenho <span class="cod">UC_NAO_ACHADA</span></h2><!-- provisório -->
+            <dl>
+              <!-- provisório -->
+              <dt>O que é</dt><dd>O desenho não tem bloco de UC perto da rede nova (ou o projeto é um KML, que não traz blocos).</dd>
+              <dt>Por que importa</dt><dd>Sem a UC, o memorial sai com a coordenada em amarelo para preencher e o assunto da planilha pode sair errado.</dd>
+              <dt>O que fazer</dt><dd>Clique em "Marcar no mapa" e depois no ponto onde fica o padrão do cliente.</dd>
+            </dl>
+            <div class="acoes"><button type="button" class="botao mini forte" data-acao="marcar">Marcar no mapa</button></div>
+          </div>
+          <p class="amarelo-txt" role="status" id="msg-clique" hidden>Clique no mapa onde fica a UC.</p>
+        </div>
+
+        <div data-ex="uc:confirmada" hidden>
+          <article class="cartao">
+            <h2>UC do solicitante</h2>
+            <dl class="linha-dl">
+              <dt>Bloco</dt><dd>UC À IMPLANTAR (UC 1)</dd>
+              <dt>No memorial</dt><dd><b>(0523380, 9586120)</b></dd>
+              <dt>Dentro de</dt><dd>APA Exemplo (UC estadual)</dd>
+              <dt>Em APP</dt><dd>Não</dd>
+            </dl>
+            <p class="nota">Assunto da planilha (célula A1):</p>
+<pre class="resumo-txt">SOB 0000000001_PROCESSO DOCUMENTAL_UC E PARTE DA REDE EM UNIDADE DE CONSERVAÇÃO ESTADUAL E PARTE DA REDE EM APP</pre>
+            <div><button type="button" class="link" data-ir="uc:varias">trocar a UC</button></div>
+          </article>
+        </div>
+      </div>
+    </details>
+
+    <!-- ================= 5b Dados da obra ================= -->
+    <details class="passo atual" open>
+      <summary><span class="num">5b</span><span>Dados da obra<small>6 de 8 seções completas · 1 vermelho</small></span></summary>
+      <div class="corpo">
+        <p class="ajuda">O que você digitar aqui vai para o memorial e para a planilha. <strong>Os dados do cliente não ficam guardados</strong> quando a página fecha, a não ser que você salve o caso.</p>
+
+        <details class="secao" open>
+          <summary><span>Interessado<small>Fulano de Tal</small></span><span class="pilula am">falta o CEP</span></summary>
+          <div class="dentro">
+            <div class="cx"><label for="i-nome">Nome</label><input id="i-nome" type="text" value="Fulano de Tal"></div>
+            <div class="cx"><label for="i-end">Endereço (logradouro e número)</label><input id="i-end" type="text" value="Rua Exemplo, 100"></div>
+            <div class="duas">
+              <div class="cx"><label for="i-bairro">Bairro ou zona</label><input id="i-bairro" type="text" value="Sítio Exemplo"></div>
+              <div class="cx"><label for="i-cep">CEP</label><input id="i-cep" class="dado" type="text" inputmode="numeric" placeholder="00000-000"></div>
+            </div>
+            <div class="aviso amarelo">
+              <h2>CEP em branco <span class="cod">CEP_VAZIO</span></h2>
+              <dl>
+                <dt>O que é</dt><dd>CEP do interessado em branco.</dd>
+                <dt>Por que importa</dt><dd>O CEP vai no memorial e na planilha; sem ele o órgão pode devolver o processo.</dd>
+                <dt>O que fazer</dt><dd>Digite o CEP. Em zona rural, use o CEP da sede do município.</dd>
+              </dl>
+            </div>
+          </div>
+        </details>
+
+        <details class="secao">
+          <summary><span>Obra<small>Cidade Exemplo · SED Exemplo · rural</small></span><span class="pilula ok">completo</span></summary>
+          <div class="dentro">
+            <div class="cx"><label for="o-end">Endereço da obra</label><input id="o-end" type="text" value="Estrada Exemplo, km 4"></div>
+            <div class="cx"><label for="o-mun">Município</label><input id="o-mun" type="text" value="Cidade Exemplo">
+              <span class="nota">Veio do KMZ. Se você trocar, sai um aviso: o órgão foi calculado com este.</span></div><!-- provisório -->
+            <div class="duas">
+              <div class="cx"><label for="o-sed">Subestação (SED)</label><input id="o-sed" type="text" value="SED Exemplo"></div>
+              <div class="cx"><label for="o-ali">Alimentador</label><input id="o-ali" class="dado" type="text" value="01X1"></div>
+            </div>
+            <div class="duas">
+              <div class="cx"><label for="o-csi"><abbr title="C.S.I.: o número do circuito anterior">C.S.I.</abbr> anterior</label><input id="o-csi" class="dado" type="text" value="000000"></div>
+              <div class="cx"><label for="o-sob">Data da SOB na GOM.net</label><input id="o-sob" type="date" value="2026-11-03"></div>
+            </div>
+            <fieldset class="cx"><legend>Zona</legend>
+              <div class="opcoes"><label><input type="radio" name="zona" checked> Rural</label><label><input type="radio" name="zona"> Urbana</label></div>
+            </fieldset>
+          </div>
+        </details>
+
+        <details class="secao">
+          <summary><span>Finalidade<small>Ligação nova grupo B · monofásico</small></span><span class="pilula ok">completo</span></summary>
+          <div class="dentro">
+            <div class="cx"><label for="f-tipo">Tipo de atendimento</label>
+              <select id="f-tipo"><option selected>Ligação nova grupo B</option><option>Ligação nova grupo A</option><option>Extensão de rede</option><option>Melhoria</option><option>Outro</option></select></div>
+            <fieldset class="cx"><legend>Fases</legend>
+              <div class="opcoes"><label><input type="radio" name="fases" checked> Monofásico</label><label><input type="radio" name="fases"> Trifásico</label></div>
+            </fieldset>
+            <div class="cx"><label for="f-txt">Texto da finalidade no memorial</label>
+              <textarea id="f-txt">Alimentar unidade consumidora monofásica em tensão secundária de 220 V para atendimento de cliente do Grupo B, situado no Estrada Exemplo, km 4, Cidade Exemplo - CE.</textarea>
+              <span class="nota">O site escreve pelo tipo. Pode mudar à vontade.</span></div>
+          </div>
+        </details>
+
+        <details class="secao" open>
+          <summary><span>Rede<small>9 postes novos no desenho</small></span><span class="pilula verm">postes não batem</span></summary>
+          <div class="dentro">
+            <div class="cx"><label for="r-mt">Cabo da MT</label><input id="r-mt" type="text" value="CAA 4 AWG" list="cabos-mt"></div>
+            <div class="cx"><label for="r-bt">Cabo da BT</label><input id="r-bt" type="text" value="Multiplexado 2x35+35 mm²" list="cabos-bt"></div>
+            <datalist id="cabos-mt"><option value="CAA 4 AWG"></option><option value="CAA 2 AWG"></option><option value="CAA 1/0 AWG"></option></datalist><!-- provisório: a lista dos mais comuns -->
+            <datalist id="cabos-bt"><option value="Multiplexado 2x35+35 mm²"></option><option value="Multiplexado 3x35+35 mm²"></option></datalist>
+            <div class="cx"><span class="rot" id="rot-postes">Postes novos por tipo</span>
+              <table class="postes" aria-labelledby="rot-postes">
+                <thead><tr><th>Altura (m)</th><th>daN</th><th class="n">Quantos</th></tr></thead>
+                <tbody>
+                  <tr><td><input type="text" value="11" aria-label="Altura do tipo 1"></td><td><input type="text" value="300" aria-label="daN do tipo 1"></td><td><input type="text" value="4" aria-label="Quantidade do tipo 1"></td></tr>
+                  <tr><td><input type="text" value="11" aria-label="Altura do tipo 2"></td><td><input type="text" value="600" aria-label="daN do tipo 2"></td><td><input type="text" value="2" aria-label="Quantidade do tipo 2"></td></tr>
+                  <tr><td><input type="text" value="9" aria-label="Altura do tipo 3"></td><td><input type="text" value="300" aria-label="daN do tipo 3"></td><td><input type="text" value="2" aria-label="Quantidade do tipo 3"></td></tr>
+                </tbody>
+                <tfoot><tr><td colspan="2">Soma</td><td class="n bate">8 de 9</td></tr></tfoot>
+              </table>
+              <div><button type="button" class="link">Somar outro tipo de poste</button></div>
+            </div>
+            <div class="aviso vermelho" role="alert">
+              <h2>Postes não batem <span class="cod">POSTES_NAO_BATEM</span></h2>
+              <dl>
+                <dt>O que é</dt><dd>Os postes por tipo somam 8, mas a rede nova tem 9 postes novos.</dd>
+                <dt>Por que importa</dt><dd>Se a soma dos postes não bate com os postes novos do desenho, o memorial e a planilha saem com número errado.</dd>
+                <dt>O que fazer</dt><dd>Ajuste a quantidade de cada tipo de poste até a soma ficar igual ao número de postes novos da rede.</dd>
+              </dl>
+            </div>
+          </div>
+        </details>
+
+        <details class="secao">
+          <summary><span>A retirar<small>não haverá retirada</small></span><span class="pilula ok">completo</span></summary>
+          <div class="dentro">
+            <label class="confirma-solta"><input type="checkbox" checked> Não haverá retirada de rede nem de postes</label>
+            <p class="ajuda">Sem marcar, diga os metros de rede por tipo e quantos postes saem.</p><!-- provisório -->
+          </div>
+        </details>
+
+        <details class="secao">
+          <summary><span>Planilha<small>perguntas da Planilha Padrão</small></span><span class="pilula ok">completo</span></summary>
+          <div class="dentro">
+            <div class="cx"><label for="p-reg">O cliente apresentou o documento de regularidade ambiental?</label>
+              <select id="p-reg"><option>SIM</option><option selected>NÃO</option><option>NÃO SE APLICA</option></select></div>
+            <div class="cx"><label for="p-anx">Ele foi anexado na GOM.net?</label>
+              <select id="p-anx"><option>SIM</option><option>NÃO</option><option selected>NÃO SE APLICA</option></select></div>
+            <div class="duas">
+              <div class="cx"><label for="p-ref">Reforma agrária</label><select id="p-ref"><option>SIM</option><option selected>NÃO</option></select></div>
+              <div class="cx"><label for="p-man">Manutenção sob rede existente</label><select id="p-man"><option>SIM</option><option selected>NÃO</option></select></div>
+            </div>
+            <div class="duas">
+              <div class="cx"><label for="p-poda">Autorização de poda anexada</label><select id="p-poda"><option>SIM</option><option selected>NÃO</option></select></div>
+              <div class="cx"><label for="p-cvt">CVT e fotos atualizadas</label><select id="p-cvt"><option selected>SIM</option><option>NÃO</option></select></div>
+            </div>
+            <div class="cx"><label for="p-val">Validador Enel</label><input id="p-val" type="text" value="Validador Exemplo"></div>
+            <div class="cx"><label for="p-agua">Tipo de água da APP do Açude Exemplo</label>
+              <select id="p-agua"><option>Rio</option><option>Lagoa natural</option><option selected>Reservatório artificial</option></select>
+              <span class="nota">Vai para a planilha e para o memorial, com as mesmas palavras.</span></div><!-- provisório -->
+          </div>
+        </details>
+
+        <details class="secao">
+          <summary><span>Regional da pasta<small>NORTE</small></span><span class="pilula ok">completo</span></summary>
+          <div class="dentro">
+            <div class="cx"><label for="g-reg">Regional</label>
+              <select id="g-reg"><option>FORTALEZA</option><option>METROPOLITANA</option><option>LESTE</option><option selected>NORTE</option><option>SUL</option><option>CENTRO-SUL</option><option>ATLÂNTICO</option></select>
+              <span class="nota">Vai no nome da pasta do kit. O site só sugere sozinho para Fortaleza; nos outros municípios, escolha na lista.</span></div><!-- provisório -->
+          </div>
+        </details>
+
+        <details class="secao" open>
+          <summary><span>Guardado neste computador<small>Empresa Exemplo Ltda · Ciclano de Tal</small></span><span class="pilula ok">completo</span></summary>
+          <div class="dentro guardado">
+            <p class="ajuda">Digitado uma vez, fica só neste navegador. <strong>Nunca vai para a internet.</strong></p>
+            <div class="arquivo">
+              <div><div class="nome">Empresa Exemplo Ltda</div>
+                <div class="det">CNPJ 00.000.000/0001-00 · Rua Exemplo, 200, Cidade Exemplo</div>
+                <div class="det">(00) 0000-0000 · contato@empresa.exemplo · sem logotipo</div></div>
+              <div class="acoes"><button type="button" class="link">trocar</button></div>
+            </div>
+            <div class="arquivo">
+              <div><div class="nome">Ciclano de Tal</div>
+                <div class="det">Responsável técnico · CREA-CE 000000 · RNP 0000000000</div>
+                <div class="det">ciclano@empresa.exemplo</div>
+                <p class="ajuda folga">Use os mesmos dados da ART.</p></div>
+              <div class="acoes"><button type="button" class="link">trocar</button></div>
+            </div>
+            <div class="arquivo">
+              <div><div class="nome">Assinatura do responsável técnico</div>
+                <div class="det">assinatura.png · 600 × 200 px</div>
+                <div class="assin folga" role="img" aria-label="Miniatura da assinatura, inventada">
+                  <svg viewBox="0 0 84 24" aria-hidden="true"><path d="M4 18c6-12 9-14 11-8s-3 10 2 6 6-11 9-9-2 9 3 7 5-7 8-6 1 6 5 5 6-4 9-4 4 3 7 2 6-3 10-2" fill="none" stroke="#1b2026" stroke-width="1.6" stroke-linecap="round"/></svg>
+                </div>
+                <p class="ajuda folga">Só entra no memorial e na planilha quando o caso não tem vermelho.</p></div><!-- provisório -->
+              <div class="acoes"><button type="button" class="link">trocar</button><button type="button" class="link">apagar</button></div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <!-- ================= 6 Baixar ================= -->
+    <details class="passo" open>
+      <summary><span class="num">6</span><span>Baixar<small>4 arquivos · sem assinatura enquanto houver vermelho</small></span></summary>
+      <div class="corpo">
+        <fieldset class="troca-exemplo" data-grupo="ass">
+          <legend>Ver no rascunho</legend>
+          <label><input type="radio" name="ex-ass" value="verm" checked> Com vermelho</label>
+          <label><input type="radio" name="ex-ass" value="ok"> Sem vermelho</label>
+        </fieldset>
+
+        <div data-ex="ass:verm">
+          <div class="aviso vermelho">
+            <h2>Memorial e planilha saem sem assinatura <span class="cod">NAO_ASSINADO</span></h2><!-- provisório -->
+            <dl>
+              <dt>O que é</dt><dd>Há 1 vermelho nos dados da obra: os postes por tipo somam 8, e a rede nova tem 9.</dd>
+              <dt>Por que importa</dt><dd>O site só põe a assinatura do responsável técnico quando nada está vermelho. Os arquivos saem com a nota "Documento não assinado".</dd>
+              <dt>O que fazer</dt><dd>Corrija os postes no passo 5b e baixe o memorial e a planilha de novo.</dd>
+            </dl>
+          </div>
+        </div>
+        <p class="ok" data-ex="ass:ok" hidden>Nenhum vermelho: o memorial e a planilha saem assinados por Ciclano de Tal.</p><!-- provisório -->
+
+        <div class="arquivo">
+          <div><div class="nome">Planilha Padrao Exemplo REV 09.xlsm</div><div class="det">Planilha Padrão da Enel · REV 09 · 20/03/2026 · guardada neste computador</div></div>
+          <button type="button" class="link">trocar</button>
+        </div>
+
+        <div class="grupo">
+          <div class="baixa">
+            <span class="nome">KML e SHP</span><button type="button" class="botao mini">Baixar</button>
+            <code>0000000001 KML.zip</code>
+            <span class="det">As camadas da Parte 1, agora com a UC e as árvores.</span>
+          </div>
+          <div class="baixa">
+            <span class="nome">Memorial em Word</span><button type="button" class="botao mini">Baixar</button>
+            <code>0000000001 MEMORIAL DESCRITIVO.docx</code>
+            <span class="det">Ainda sem as imagens: elas entram no passo 6a. A tabela de materiais sai em amarelo, para colar do orçamento do GOM.</span>
+            <span class="selos" data-ex="ass:verm"><span class="pilula verm">não assinado</span></span>
+            <span class="selos" data-ex="ass:ok" hidden><span class="pilula ok">assinado</span></span>
+          </div>
+          <div class="baixa">
+            <span class="nome">Figuras para o Google Earth</span><button type="button" class="botao mini">Baixar</button>
+            <code>0000000001 FIGURAS.kmz</code>
+            <span class="det">Uma pasta por figura, já enquadrada. No Google Earth Pro: dois cliques na pasta, depois Arquivo, Salvar, Salvar imagem.</span>
+          </div>
+          <div class="baixa">
+            <span class="nome">Planilha Padrão preenchida</span><button type="button" class="botao mini">Baixar</button>
+            <code>SOB 0000000001_Planilha Padrao Exemplo_REV 09.xlsm</code>
+            <span class="det">Só a linha da obra, o assunto e o texto curto. A macro e as listas ficam como estavam.</span>
+            <span class="selos" data-ex="ass:verm"><span class="pilula verm">não assinada</span><span class="pilula am">1 célula para escolher</span></span>
+            <span class="selos" data-ex="ass:ok" hidden><span class="pilula ok">assinada</span><span class="pilula am">1 célula para escolher</span></span>
+          </div>
+        </div>
+
+        <div class="aviso amarelo">
+          <h2>Escolha na lista <span class="cod">PLANILHA_ESCOLHER</span></h2>
+          <dl>
+            <dt>O que é</dt><dd>Coluna AB (área protegida): escolha na lista ao abrir no Excel.</dd><!-- provisório: coluna e cabeçalho inventados -->
+            <dt>Por que importa</dt><dd>Opção de lista errada ou vazia faz a Enel devolver o processo; o site só escreve a opção de que tem certeza.</dd>
+            <dt>O que fazer</dt><dd>Abra a planilha no Excel e escolha a opção certa na lista da célula.</dd>
+          </dl>
+        </div>
+      </div>
+    </details>
+
+    <!-- ================= 6a Figuras ================= -->
+    <details class="passo" open>
+      <summary><span class="num">6a</span><span>Figuras<small>5 figuras · 4 imagens encaixadas</small></span></summary>
+      <div class="corpo">
+        <div class="soltar">Jogue aqui as imagens salvas do Google Earth (JPG ou PNG).<br>Nome com o número ("Figura 3", "fig3") encaixa sozinho.</div>
+
+        <div class="cabeca-lista"><span>Confira cada figura antes de gerar o memorial</span></div><!-- provisório -->
+        <div class="lista">
+          <div class="fig"><div class="foto sat" role="img" aria-label="Miniatura de exemplo"></div><div>
+            <div class="t">Figura 1: Localização da UC</div>
+            <div class="leg">Localização da UC; ponto vermelho: UC</div>
+            <div class="de"><label for="f1">Imagem</label><select id="f1"><option selected>Figura 1.jpg</option><option>fig2.png</option><option>IMG_0457.jpg</option><option>Figura 4.png</option><option>nenhuma</option></select><span class="como-achou">pelo nome</span></div></div></div>
+          <div class="fig"><div class="foto sat" role="img" aria-label="Miniatura de exemplo"></div><div>
+            <div class="t">Figura 2: Rede projetada</div>
+            <div class="leg">Rede projetada</div>
+            <div class="de"><label for="f2">Imagem</label><select id="f2"><option>Figura 1.jpg</option><option selected>fig2.png</option><option>IMG_0457.jpg</option><option>Figura 4.png</option><option>nenhuma</option></select><span class="como-achou">pelo nome</span></div></div></div>
+          <div class="fig"><div class="foto sat" role="img" aria-label="Miniatura de exemplo"></div><div>
+            <div class="t">Figura 3: Interferência na APA Exemplo</div>
+            <div class="leg">entre os postes Nº 10 e Nº 13; linha vermelha: rede de média tensão; linha verde: rede de baixa tensão; polígono amarelo: área protegida</div>
+            <div class="de"><label for="f3">Imagem</label><select id="f3"><option>Figura 1.jpg</option><option>fig2.png</option><option selected>IMG_0457.jpg</option><option>Figura 4.png</option><option>nenhuma</option></select><span class="pilula am">pela ordem: confira</span></div></div></div>
+          <div class="fig"><div class="foto sat" role="img" aria-label="Miniatura de exemplo"></div><div>
+            <div class="t">Figura 4: Interferência na APP do Açude Exemplo</div>
+            <div class="leg">entre os postes Nº 18 e Nº 19; linha azul: rede conjugada de média e baixa tensão; polígono amarelo: APP</div>
+            <div class="de"><label for="f4">Imagem</label><select id="f4"><option>Figura 1.jpg</option><option>fig2.png</option><option>IMG_0457.jpg</option><option selected>Figura 4.png</option><option>nenhuma</option></select><span class="como-achou">pelo nome</span></div></div></div>
+          <div class="fig falta"><div class="foto vazia" role="img" aria-label="Sem imagem"></div><div>
+            <div class="t">Figura 5: Árvores com intervenção</div>
+            <div class="leg">marcador: poda simples</div>
+            <div class="de"><label for="f5">Imagem</label><select id="f5"><option>Figura 1.jpg</option><option>fig2.png</option><option>IMG_0457.jpg</option><option>Figura 4.png</option><option selected>nenhuma</option></select><span class="amarelo-txt">sem imagem: o memorial baixa mesmo assim, com um quadro amarelo vazio no lugar</span></div></div></div><!-- provisório -->
+        </div>
+
+        <div class="recusada"><strong>Não encaixadas</strong>
+          <span><code>mapa.bmp</code>: use JPG ou PNG: salve a imagem de novo no Google Earth</span>
+          <span><code>Figura 7.jpg</code>: não há Figura 7 neste memorial</span>
+        </div>
+
+        <label class="confirma-solta"><input type="checkbox" id="conferi-figuras"> Conferi: cada imagem está na figura certa</label><!-- provisório -->
+        <button type="button" class="botao forte grande" id="baixar-figuras" disabled>Baixar o memorial com as figuras</button>
+        <p class="ajuda" id="trava-figuras">Só baixa depois de marcar "Conferi". Olhe a lista: principalmente as imagens achadas "pela ordem".</p><!-- provisório -->
+        <p class="ajuda">Sai o mesmo <code>0000000001 MEMORIAL DESCRITIVO.docx</code>, com cada imagem no lugar, na largura da página e com a legenda.</p>
+      </div>
+    </details>
+
+    <!-- ================= 7 Montar o kit ================= -->
+    <details class="passo" open>
+      <summary><span class="num">7</span><span>Montar o kit<small>11 arquivos soltos · 1 sem papel</small></span></summary>
+      <div class="corpo">
+        <div class="soltar">Jogue aqui a ART, a CVT, o CAD (DWG e PDF), a planta (DWG e PDF), o memorial em PDF assinado e a planilha em PDF assinada. E a autorização de poda, se houver.<br>Pode ser do jeito que estiverem: o site renomeia.</div>
+
+        <div class="cabeca-lista"><span id="cab-sem">Falta dizer o que é</span><span id="cont-sem">1 arquivo</span></div><!-- provisório -->
+        <div class="lista">
+          <div class="solto sem-papel" id="solto-sem">
+            <span class="orig">desenho final.dwg</span>
+            <span class="papel"><label for="papel-sem">É</label>
+              <select id="papel-sem"><option value="" selected>escolha o que é</option><option>Projeto (CAD) em DWG</option><option>Planta georreferenciada em DWG</option></select></span>
+            <span class="aviso-papel" id="aviso-sem">O site não reconheceu pelo nome e não chuta. Diga o que é para montar o kit.</span><!-- provisório -->
+          </div>
+        </div>
+
+        <details class="secao" id="reconhecidos">
+          <summary><span>10 arquivos reconhecidos<small>o site achou o papel pelo nome; abra para conferir ou trocar</small></span></summary><!-- provisório -->
+          <div class="dentro">
+            <div class="cabeca-lista"><span>O que cada arquivo é</span><span>10 arquivos</span></div>
+            <div class="lista">
+          <div class="solto"><span class="orig">ART contrato 000-2026.pdf</span>
+            <span class="papel"><label for="p1">É</label><select id="p1"><option selected>ART</option><option>CVT</option><option>outro</option></select></span>
+            <span class="vai">vai como <code>ART contrato 000-2026.pdf</code> (a ART mantém o nome)</span></div>
+          <div class="solto"><span class="orig">cvt obra.pdf</span>
+            <span class="papel"><label for="p2">É</label><select id="p2"><option selected>CVT</option><option>ART</option></select></span>
+            <span class="vai">vai como <code>0000000001_CVT.pdf</code></span></div>
+          <div class="solto"><span class="orig">0000000001 projeto.pdf</span>
+            <span class="papel"><label for="p3">É</label><select id="p3"><option selected>Projeto (CAD) em PDF</option><option>Planta georreferenciada em PDF</option></select></span>
+            <span class="vai">vai como <code>0000000001 CAD.pdf</code></span></div>
+          <div class="solto"><span class="orig">planta georref.dwg</span>
+            <span class="papel"><label for="p4">É</label><select id="p4"><option selected>Planta georreferenciada em DWG</option><option>Projeto (CAD) em DWG</option></select></span>
+            <span class="vai">vai como <code>0000000001 PLANTA GEORREFERENCIADA.dwg</code></span></div>
+          <div class="solto"><span class="orig">planta georref.pdf</span>
+            <span class="papel"><label for="p5">É</label><select id="p5"><option selected>Planta georreferenciada em PDF</option><option>Projeto (CAD) em PDF</option></select></span>
+            <span class="vai">vai como <code>0000000001 PLANTA GEORREFERENCIADA.pdf</code></span></div>
+          <div class="solto"><span class="orig">0000000001 MEMORIAL DESCRITIVO.pdf</span>
+            <span class="papel"><label for="p6">É</label><select id="p6"><option selected>Memorial em PDF</option><option>Memorial em Word</option></select></span>
+            <span class="vai">vai como <code>MEMORIAL/0000000001 MEMORIAL DESCRITIVO.pdf</code></span></div>
+          <div class="solto"><span class="orig">0000000001 MEMORIAL DESCRITIVO.docx</span>
+            <span class="papel"><label for="p7">É</label><select id="p7"><option selected>Memorial em Word</option><option>Memorial em PDF</option></select></span>
+            <span class="vai">vai como <code>MEMORIAL/0000000001 MEMORIAL DESCRITIVO.docx</code></span></div>
+          <div class="solto"><span class="orig">SOB 0000000001_Planilha Padrao Exemplo_REV 09.xlsm</span>
+            <span class="papel"><label for="p8">É</label><select id="p8"><option selected>Planilha Padrão (.xlsm)</option></select></span>
+            <span class="vai">vai com o mesmo nome</span></div>
+          <div class="solto"><span class="orig">SOB 0000000001_Planilha Padrao Exemplo_REV 09.pdf</span>
+            <span class="papel"><label for="p9">É</label><select id="p9"><option selected>Planilha Padrão em PDF</option></select></span>
+            <span class="vai">vai com o mesmo nome</span></div>
+          <div class="solto"><span class="orig">autorizacao poda prefeitura.pdf</span>
+            <span class="papel"><label for="p10">É</label><select id="p10"><option selected>Autorização de poda</option><option>Documento de regularidade do cliente</option></select></span>
+            <span class="vai">vai como <code>0000000001 AUTORIZAÇÃO PODA.pdf</code></span></div>
+            </div>
+          </div>
+        </details>
+
+        <p class="ajuda">Pasta do kit: <code>0000000001_PROCESSO DOCUMENTAL_NORTE</code>, com as pastas <code>MEMORIAL/</code>, <code>KML/</code> e <code>SHAPEFILE/</code> feitas pelo site.</p>
+
+        <button type="button" class="botao forte grande" id="montar" disabled>Conferir e montar o kit</button>
+        <p class="ajuda" id="montar-trava">Diga o que é <code>desenho final.dwg</code> para montar.</p><!-- provisório -->
+
+        <fieldset class="troca-exemplo" data-grupo="k7">
+          <legend>Ver no rascunho</legend>
+          <label><input type="radio" name="ex-k7" value="verm" checked> Conferência com vermelho</label>
+          <label><input type="radio" name="ex-k7" value="pronto"> Kit pronto</label>
+        </fieldset>
+
+        <div class="lista" data-ex="k7:verm">
+          <div class="item vermelho"><span class="b"></span><div><strong>Hectares errados num trecho de 412 metros de média tensão</strong>
+            <p>O trecho "com cerca de 412 metros da rede de média tensão, com área de 0,02472 ha" diz 0,02472 ha, mas 412 metros × 6 m de faixa ÷ 10.000 dá 0,2472 ha. O órgão refaz a conta e devolve.</p>
+            <p class="como">Como corrigir: no trecho, troque 0,02472 ha por 0,2472 ha, gere o PDF de novo e solte o PDF novo.</p></div></div>
+          <div class="item amarelo"><span class="b"></span><div><strong>Falta: Documento de regularidade do cliente</strong>
+            <p>A UC está dentro de área protegida, e a planilha pergunta se o cliente apresentou o documento que prova a regularidade (CCU, título, escritura ou contrato de concessão).</p>
+            <p class="como">Como corrigir: solte o documento de regularidade do cliente, se ele apresentou.</p></div></div>
+          <div class="item verde"><span class="b"></span><div><strong>Documentos obrigatórios todos no kit</strong>
+            <p>Memorial, ART, CVT, projeto (CAD), planta e Planilha Padrão, cada um nos formatos pedidos, estão no kit.</p></div></div>
+          <div class="item verde"><span class="b"></span><div><strong>Metros da rede batem</strong>
+            <p>MT 547, BT 125 e conjugada 130 metros, iguais ao caso.</p></div></div>
+          <button type="button" class="botao grande" disabled>Baixar o kit</button>
+          <p class="ajuda">Vermelho trava o baixar. Corrija e monte de novo.</p>
+        </div>
+
+        <div class="lista" data-ex="k7:pronto" hidden>
+          <div class="resumo-topo"><span class="pilula">0 vermelhos</span><span class="pilula am">1 amarelo para conferir</span><span class="pilula ok">14 verdes</span></div>
+          <div class="item amarelo"><span class="b"></span><div><strong>Falta: Documento de regularidade do cliente</strong>
+            <p>A UC está dentro de área protegida, e a planilha pergunta se o cliente apresentou o documento que prova a regularidade (CCU, título, escritura ou contrato de concessão).</p>
+            <p class="como">Como corrigir: solte o documento de regularidade do cliente, se ele apresentou.</p></div></div>
+          <button type="button" class="botao forte grande">Baixar o kit</button>
+          <p class="ajuda">Sai <code>0000000001_PROCESSO DOCUMENTAL_NORTE.zip</code>. Amarelo deixa baixar: confira a lista antes de mandar.</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- ================= 8 Conferir um zip ================= -->
+    <details class="passo" open>
+      <summary><span class="num">8</span><span>Conferir um zip<small>kit feito fora do site, antes de mandar ao órgão</small></span></summary>
+      <div class="corpo">
+        <div class="soltar">Arraste aqui o zip do kit montado.<br>Ele não sai do seu computador.</div>
+        <div class="soltar">Se tiver, solte também o DXF do projeto: os metros são conferidos pelo desenho.</div><!-- provisório -->
+
+        <fieldset class="troca-exemplo" data-grupo="k8">
+          <legend>Ver no rascunho</legend>
+          <label><input type="radio" name="ex-k8" value="sem" checked> Sem caso aberto</label>
+          <label><input type="radio" name="ex-k8" value="com"> Com os passos 1 a 5 feitos</label>
+        </fieldset>
+
+        <div class="lista" data-ex="k8:sem">
+          <p class="ajuda"><strong>Sem caso aberto</strong>, o site confere só o que o texto e o zip mostram: hectares de cada trecho, soma dos trechos, metros do KML e do SHP, contradições e marcas esquecidas.</p><!-- provisório -->
+          <div class="item vermelho"><span class="b"></span><div><strong>Marca amarela esquecida no texto (2)</strong>
+            <p>O texto ainda tem "[COLAR DO GOM]", "[PREENCHER: vida útil em anos]". O órgão devolve memorial com campo por preencher.</p>
+            <p class="como">Como corrigir: preencha cada marca [PREENCHER: ...], [COLAR DO GOM] e XXXX no Word e gere o PDF de novo.</p></div></div>
+          <div class="item amarelo"><span class="b"></span><div><strong>Áreas e órgão não conferidos</strong>
+            <p>Para conferir as áreas e o órgão, faça os passos 1 a 5 com o KML da rede deste zip.</p></div></div>
+          <div class="item amarelo"><span class="b"></span><div><strong>Metros do texto não conferidos</strong>
+            <p>Sem o caso e sem os metros por tipo do KML/SHP do zip, os metros do texto não foram conferidos.</p>
+            <p class="como">Como corrigir: faça os passos 1 a 5 com o KML da rede deste zip.</p></div></div>
+          <div class="item amarelo"><span class="b"></span><div><strong>Árvores e poda não conferidas</strong>
+            <p>Sem o caso, o site não sabe se a obra tem poda, supressão ou limpeza de faixa, então o que o texto diz disso não foi conferido.</p>
+            <p class="como">Como corrigir: faça os passos 1 a 5 com o KML da rede deste zip.</p></div></div>
+          <div class="item verde"><span class="b"></span><div><strong>Hectares dos trechos conferem</strong>
+            <p>Os 3 trechos têm hectares = metros × faixa ÷ 10.000.</p></div></div>
+          <button type="button" class="botao">Fazer os passos 1 a 5 com o KML deste zip</button><!-- provisório -->
+        </div>
+
+        <div class="lista" data-ex="k8:com" hidden>
+          <div class="item vermelho"><span class="b"></span><div><strong>Área no texto que a rede não cruza: Reserva Exemplo</strong>
+            <p>O memorial diz que a rede passa na Reserva Exemplo, mas pelo caso a rede nova fica a 74 m dela, sem cruzar.</p><!-- provisório -->
+            <p class="como">Como corrigir: troque a frase por "não intervém em outra área protegida" e gere o PDF de novo.</p></div></div>
+          <div class="item amarelo"><span class="b"></span><div><strong>Responsável técnico diferente do guardado</strong>
+            <p>O texto não cita Ciclano de Tal, o responsável técnico guardado no site. Pode ser outro RT.</p>
+            <p class="como">Como corrigir: confirme o nome do RT com a ART.</p></div></div>
+          <div class="item verde"><span class="b"></span><div><strong>Metros da rede batem</strong>
+            <p>MT 547, BT 125 e conjugada 130 metros, iguais ao caso.</p></div></div>
+          <div class="item verde"><span class="b"></span><div><strong>Árvores conferem</strong>
+            <p>As 2 árvores do KML estão no texto com a coordenada e a intervenção.</p></div></div>
+        </div>
+      </div>
+    </details>
+
+  </div>
+</aside>
+
+<main class="previa" aria-label="Mapa de conferência">
+  <div class="palco">
+    <svg class="mapa" id="mapa" viewBox="0 0 900 640" role="img" aria-label="Mapa desenhado à mão com a rede nova, as áreas, as árvores e os blocos de UC, dados inventados">
+      <defs>
+        <pattern id="grade" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0H0V50" fill="none" stroke="#2a343e" stroke-width="1"/></pattern>
+      </defs>
+      <rect width="900" height="640" fill="url(#grade)"/>
+      <polyline points="0,590 220,560 470,585 700,610 900,590" fill="none" stroke="#38424d" stroke-width="3"/>
+      <polyline points="640,0 655,180 700,380 690,640" fill="none" stroke="#38424d" stroke-width="2"/>
+
+      <!-- APA Exemplo -->
+      <polygon points="90,70 380,50 440,230 260,300 100,240" fill="rgba(95,191,143,.14)" stroke="#5fbf8f" stroke-width="1.5"/>
+      <text x="110" y="100" fill="#5fbf8f" font-size="13">APA Exemplo</text>
+      <text x="110" y="116" fill="#8a949f" font-size="10.5">UC estadual</text>
+
+      <!-- Açude Exemplo e APP confirmada -->
+      <ellipse cx="640" cy="300" rx="150" ry="100" fill="rgba(243,196,47,.22)" stroke="#f3c42f" stroke-width="1.5"/>
+      <ellipse cx="640" cy="300" rx="90" ry="48" fill="rgba(79,143,214,.35)" stroke="#4f8fd6" stroke-width="1.5"/>
+      <text x="598" y="304" fill="#9cc2ee" font-size="12">Açude Exemplo</text>
+      <text x="560" y="420" fill="#f3c42f" font-size="11">APP confirmada: 100 m</text>
+
+      <!-- Reserva próxima -->
+      <polygon points="700,470 820,490 800,590 690,570" fill="none" stroke="#8a949f" stroke-width="1.2" stroke-dasharray="5 4"/>
+      <text x="706" y="520" fill="#8a949f" font-size="12">Reserva Exemplo</text>
+      <text x="706" y="535" fill="#8a949f" font-size="10.5">a 74 m, não cruza</text>
+
+      <!-- trechos em área, com destaque -->
+      <polyline points="200,330 260,260 330,190 400,130" fill="none" stroke="#ff5d5d" stroke-width="10" stroke-opacity=".28" stroke-linecap="round"/>
+      <polyline points="555,225 610,205" fill="none" stroke="#4cc9f0" stroke-width="10" stroke-opacity=".28" stroke-linecap="round"/>
+      <!-- MT, BT, conjugada -->
+      <polyline points="120,380 200,330 260,260 330,190 400,130 470,170 555,225" fill="none" stroke="#ff5d5d" stroke-width="3" stroke-linejoin="round"/>
+      <polyline points="200,330 190,420 210,500" fill="none" stroke="#3f8f2a" stroke-width="2.5"/>
+      <polyline points="555,225 610,205 700,190" fill="none" stroke="#4cc9f0" stroke-width="3"/>
+
+      <!-- postes -->
+      <g fill="#15191e" stroke="#e6eaee" stroke-width="1.5">
+        <rect x="115" y="375" width="10" height="10"/><rect x="195" y="325" width="10" height="10"/><rect x="255" y="255" width="10" height="10"/>
+        <rect x="325" y="185" width="10" height="10"/><rect x="395" y="125" width="10" height="10"/><rect x="465" y="165" width="10" height="10"/>
+        <rect x="550" y="220" width="10" height="10"/><rect x="605" y="200" width="10" height="10"/><rect x="695" y="185" width="10" height="10"/>
+      </g>
+      <g fill="#aab3bd" font-size="10.5">
+        <text x="96" y="372">P-01</text><text x="209" y="322">P-10</text><text x="270" y="250">P-11</text><text x="338" y="182">P-12</text>
+        <text x="404" y="120">P-13</text><text x="476" y="160">P-14</text><text x="532" y="246">P-18</text><text x="612" y="196">P-19</text><text x="706" y="182">P-20</text>
+      </g>
+
+      <!-- árvores com poda -->
+      <g fill="#4cc38a" stroke="#15191e" stroke-width="1"><circle cx="362" cy="168" r="5"/><circle cx="430" cy="158" r="5"/></g>
+
+      <!-- blocos de UC achados no DXF -->
+      <g id="uc-cand">
+        <circle cx="228" cy="512" r="9" fill="none" stroke="#e6eaee" stroke-width="2"/>
+        <text x="242" y="516" fill="#e6eaee" font-size="11">UC 2</text>
+      </g>
+      <g id="uc-1">
+        <rect x="223" y="263" width="14" height="14" transform="rotate(45 230 270)" fill="#f3c42f" stroke="#15191e" stroke-width="1.5"/>
+        <text x="184" y="266" fill="#f3c42f" font-size="11">UC 1</text>
+      </g>
+    </svg>
+
+    <div class="ferramentas">
+      <button type="button" class="botao" data-acao="marcar" id="bt-marcar">Marcar UC</button>
+      <button type="button" class="botao">Ajustar tela</button>
+    </div>
+
+    <div class="camadas" role="group" aria-label="Camadas do mapa">
+      <h2>No mapa</h2>
+      <span class="l"><i class="c-mt"></i>MT nova</span>
+      <span class="l"><i class="c-bt"></i>BT nova</span>
+      <span class="l"><i class="c-conj"></i>Conjugada nova</span>
+      <span class="l"><i class="area c-area"></i>Área protegida</span>
+      <span class="l"><i class="area c-app"></i>APP confirmada</span>
+      <span class="l"><i class="uc-escolhida"></i>UC escolhida</span>
+      <span class="l"><i class="uc-outra"></i>Outro bloco de UC</span>
+    </div>
+  </div>
+
+  <footer class="status">
+    <span><b>UC</b> (0523380, 9586120)</span>
+    <span>UTM 24S · SIRGAS 2000</span>
+    <span id="status-modo">Rede nova: <b>MT 547 m</b> · <b>BT 125 m</b> · <b>Conj. 130 m</b></span>
+    <span class="dir">Rascunho estático · dados inventados · sem internet</span>
+  </footer>
+</main>
+
+<script>
+// Só do rascunho: troca os exemplos e mostra os estados. A tela de verdade vem do estado-kit.ts.
+(function () {
+  function mostrar(grupo, valor) {
+    document.querySelectorAll('[data-ex]').forEach(function (el) {
+      var marcas = el.dataset.ex.split(' ');
+      if (marcas.some(function (m) { return m.indexOf(grupo + ':') === 0; })) el.hidden = marcas.indexOf(grupo + ':' + valor) < 0;
+    });
+    var r = document.querySelector('.troca-exemplo[data-grupo="' + grupo + '"] input[value="' + valor + '"]');
+    if (r) r.checked = true;
+  }
+  document.querySelectorAll('.troca-exemplo').forEach(function (g) {
+    g.addEventListener('change', function (e) { mostrar(g.dataset.grupo, e.target.value); });
+    mostrar(g.dataset.grupo, g.querySelector('input:checked').value);
+  });
+  document.querySelectorAll('[data-ir]').forEach(function (b) {
+    b.addEventListener('click', function () { var p = b.dataset.ir.split(':'); mostrar(p[0], p[1]); });
+  });
+
+  // marcar a UC no mapa: o mapa entra no modo de clique
+  var mapa = document.getElementById('mapa');
+  var status = document.getElementById('status-modo');
+  var statusAntes = status.innerHTML;
+  var marcando = false;
+  function modo(ligar) {
+    marcando = ligar;
+    mapa.classList.toggle('clicando', ligar);
+    document.getElementById('bt-marcar').classList.toggle('ativo', ligar);
+    document.getElementById('msg-clique').hidden = !ligar;
+    status.innerHTML = ligar ? '<span class="aviso-barra">Clique no mapa onde fica a UC</span>' : statusAntes;
+  }
+  document.querySelectorAll('[data-acao="marcar"]').forEach(function (b) { b.addEventListener('click', function () { modo(!marcando); }); });
+  mapa.addEventListener('click', function () { if (marcando) { modo(false); mostrar('uc', 'confirmada'); } });
+
+  // abrir caso salvo: mostra o amarelo do caso com outro projeto
+  document.querySelector('[data-acao="abrir-caso"]').addEventListener('click', function () {
+    document.getElementById('aviso-caso').hidden = false;
+  });
+
+  // 6a: a lista é conferida antes de gerar
+  var conferi = document.getElementById('conferi-figuras');
+  conferi.addEventListener('change', function () { document.getElementById('baixar-figuras').disabled = !conferi.checked; document.getElementById('trava-figuras').hidden = conferi.checked; });
+
+  // 7: arquivo sem papel trava o montar
+  var sel = document.getElementById('papel-sem');
+  sel.addEventListener('change', function () {
+    var ok = sel.value !== '';
+    document.getElementById('solto-sem').classList.toggle('sem-papel', !ok);
+    document.getElementById('aviso-sem').hidden = ok;
+    document.getElementById('montar').disabled = !ok;
+    document.getElementById('montar-trava').hidden = ok;
+    document.getElementById('cab-sem').textContent = ok ? 'Todos os arquivos têm papel' : 'Falta dizer o que é';
+    document.getElementById('cont-sem').textContent = ok ? '0 faltando' : '1 arquivo';
+  });
+})();
+</script>
+</body>
+</html>

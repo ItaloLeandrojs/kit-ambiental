@@ -13,7 +13,10 @@ export interface AcoesMapa {
   /** Duplo clique: fecha a limpeza de faixa. */
   fecharLimpeza?(): void;
 }
-export type EntradaMapa = Pick<Retrato, 'base' | 'rede'> & Partial<Pick<Retrato, 'apps' | 'arvores' | 'limpeza' | 'modoMapa'>>;
+export type EntradaMapa = Pick<Retrato, 'base' | 'rede'> & Partial<Pick<Retrato, 'apps' | 'arvores' | 'limpeza' | 'modoMapa'>> & {
+  /** Parte 2: a UC do cliente (5a), os outros blocos de UC achados no DXF e o modo de clique da UC. */
+  uc?: Pt | null; candidatosUc?: Pt[]; marcandoUc?: boolean;
+};
 export interface Mapa {
   elemento: SVGSVGElement;
   atualizar(r: EntradaMapa): void;
@@ -89,7 +92,8 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
   const gVaos = el('g', { class: 'vaos' });
   const gPostes = el('g', { class: 'postes' });
   const gArvores = el('g', { class: 'arvores' });
-  svg.append(gEstradas, gAreas, gApps, gVaos, gPostes, gArvores);
+  const gUcs = el('g', { class: 'ucs' });
+  svg.append(gEstradas, gAreas, gApps, gVaos, gPostes, gArvores, gUcs);
   raiz.append(svg);
 
   let vb = { x: 0, y: -1000, w: 2000 }; // viewBox: canto, largura; a altura vem do formato da tela
@@ -168,6 +172,24 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
       if (!a.ponto) continue;
       const rotulo = `${a.especie.trim() || 'Árvore'}: ${a.intervencao === 'supressao' ? 'supressão' : 'poda'}`;
       gArvores.append(el('path', { class: `arvore-ponto ${a.intervencao}`, d: `M${ponto(a.ponto).replace(',', ' ')} l0 0` }, [titulo(rotulo)]));
+    }
+  }
+
+  // UC do cliente: losango amarelo (um traço mínimo na diagonal, com ponta quadrada); outro bloco de UC: anel claro
+  function desenharUcs(uc: Pt | null, candidatos: Pt[]) {
+    gUcs.replaceChildren();
+    const mesmo = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.01;
+    candidatos.forEach((p, i) => {
+      if (uc && mesmo(p, uc)) return;
+      const d = `M${ponto(p).replace(',', ' ')} l0 0`;
+      gUcs.append(el('path', { class: 'uc-cand', d }, [titulo(`Bloco de UC ${i + 1} do desenho, não escolhido`)]));
+      gUcs.append(el('path', { class: 'uc-miolo', d }));
+    });
+    if (uc) {
+      // o traço mínimo vai em coordenada local: somado à coordenada UTM (9 milhões) ele some no float do navegador e vira quadrado
+      const attrs = { d: 'M0 0 l0.001 0.001', transform: `translate(${ponto(uc)})` };
+      gUcs.append(el('path', { class: 'uc-borda', ...attrs }));
+      gUcs.append(el('path', { class: 'uc', ...attrs }, [titulo('UC do cliente')]));
     }
   }
 
@@ -258,12 +280,12 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
   return {
     elemento: svg,
     ajustar,
-    atualizar({ base, rede, apps, arvores, limpeza, modoMapa }) {
+    atualizar({ base, rede, apps, arvores, limpeza, modoMapa, uc, candidatosUc, marcandoUc }) {
       desenharApps(rede ? (apps ?? []) : []);
-      modoAtivo = !!rede && !!modoMapa;
+      modoAtivo = !!rede && (!!modoMapa || !!marcandoUc);
       svg.classList.toggle('clicando', modoAtivo);
       if (!rede) {
-        gVaos.replaceChildren(); gPostes.replaceChildren(); gAreas.replaceChildren(); gArvores.replaceChildren();
+        gVaos.replaceChildren(); gPostes.replaceChildren(); gAreas.replaceChildren(); gArvores.replaceChildren(); gUcs.replaceChildren();
         caixaAtual = null; chaveAjuste = ''; chaveAreas = '';
         return;
       }
@@ -271,6 +293,7 @@ export function criarMapa(raiz: HTMLElement, acoes: AcoesMapa, aoMoverMouse: (p:
       caixaAtual = caixa;
       desenharRede(rede);
       desenharArvores(arvores ?? [], limpeza ?? [], modoMapa ?? null);
+      desenharUcs(uc ?? null, candidatosUc ?? []);
       if (!caixa) return;
       const chave = caixa.map((n) => Math.round(n)).join(',');
       if (base && (base !== ultimaBase || chave !== chaveAreas)) {
@@ -301,7 +324,8 @@ export const AVISO_SEM_ESTRADAS = 'Sem a base de estradas: o mapa fica sem elas'
  * Estrada é só referência: sem ela o mapa segue, com um aviso na barra; sem projeto, o aviso sai.
  */
 export function ligarEstradas(
-  estado: { ler(): Retrato; aoMudar(f: () => void): () => void },
+  // a fonte pode juntar a Parte 1 e a Parte 2 (main.ts): o mapa recebe também a UC
+  estado: { ler(): EntradaMapa; aoMudar(f: () => void): () => void },
   mapa: Pick<Mapa, 'atualizar' | 'definirEstradas'>,
   avisar: (texto: string | null) => void,
   carregar: (janela: Janela) => Promise<Aresta[]>,

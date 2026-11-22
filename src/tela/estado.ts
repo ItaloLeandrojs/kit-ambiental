@@ -11,9 +11,11 @@ import { gravarKml } from '../nucleo/kml-saida.ts';
 import { montarPacote } from '../nucleo/pacote.ts';
 import { lerDxfGeometria, type DxfGeo } from '../nucleo/dxf.ts';
 import { lerKml } from '../nucleo/kml.ts';
+import { AVISO_SUBTERRANEA, temSubterraneaDxf, temSubterraneaKml } from '../nucleo/subterranea.ts';
 import { conferirEtiquetas, conferirLocal } from '../nucleo/local.ts';
 import { incluirCamada as incluirCamadaNoNucleo, camadasCandidatas, marcarVao as marcarVaoNoNucleo, proporRedeDxf, proporRedeKml } from '../nucleo/rede.ts';
 import type { Aviso, Pt, Rede, Situacao, TipoRede, Vao } from '../nucleo/tipos.ts';
+import type { CasoSalvo } from '../nucleo/caso-salvo.ts';
 
 export interface Projeto { nome: string; os: string; detalhe: string }
 
@@ -101,6 +103,13 @@ export interface Estado {
   baixarGoogleEarth(): { nome: string; texto: string };
   conferir(bytes: Uint8Array, dxf?: Uint8Array): ItemConferencia[];
   liberarEtiqueta(sim: boolean): void;
+  /** Para a Parte 2 (estado-kit): os bytes do projeto aberto (hash do caso salvo), o DXF (UC) e as camadas incluídas. */
+  projetoAberto(): { bytes: Uint8Array; dxf: DxfGeo | null; camadasIncluidas: { camada: string; tipo: TipoRede }[] } | null;
+  /**
+   * Repõe um caso salvo sobre o projeto aberto, na ordem do estado: camadas incluídas e marcas dos vãos, depois as APPs
+   * propostas com as respostas salvas, depois postes, árvores, limpeza e a caixa da etiqueta. Avisa `aoMudar` uma vez.
+   */
+  restaurar(c: CasoSalvo): void;
   ler(): Retrato;
   aoMudar(f: () => void): () => void;
 }
@@ -149,6 +158,9 @@ export function criarEstado(deps: Dependencias = {}): Estado {
   let kmzNome: string | null = null;
   let rede: Rede | null = null;
   let dxf: DxfGeo | null = null;
+  let bytesProjeto: Uint8Array | null = null; // só para o hash do caso salvo (Parte 2)
+  let camadasIncluidas: { camada: string; tipo: TipoRede }[] = []; // o que incluirCamada juntou, para o caso salvo
+  let subterraneas: string[] = []; // camadas ou pastas de rede subterrânea achadas no projeto
   let projeto: Projeto | null = null;
   let liberado = false;
   let chaveEtiqueta = ''; // o que a caixa liberou; se o resultado da conferência mudar, a liberação cai
@@ -254,6 +266,11 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     apps = [];
     faixa = [];
     if (!rede || !base) return;
+    // subterrânea vem antes de qualquer outro bloqueio
+    if (subterraneas.length) {
+      bloqueio = { ...AVISO_SUBTERRANEA, comoCorrigir: `${AVISO_SUBTERRANEA.comoCorrigir} Achei: ${subterraneas.join(', ')}.` };
+      return;
+    }
     try {
       const local = conferirLocal(rede, base.municipios);
       const etiqueta = conferirEtiquetas(rede).aviso;
@@ -320,7 +337,8 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         const lida = await lerAreas(bytes, nome);
         base = lida;
         kmzNome = nome;
-        rede = null; dxf = null; projeto = null; liberado = false; chaveEtiqueta = '';
+        rede = null; dxf = null; subterraneas = []; projeto = null; liberado = false; chaveEtiqueta = '';
+        bytesProjeto = null; camadasIncluidas = [];
         respostas = new Map(); m2Postes = {}; limparArvores();
         recalcular();
         if (armazem) {
@@ -367,20 +385,25 @@ export function criarEstado(deps: Dependencias = {}): Estado {
         let novaRede: Rede;
         let novoDxf: DxfGeo | null = null;
         let detalhe: string;
+        let achadas: string[];
         if (/\.(kml|kmz)$/i.test(nome)) {
           // os kits reais dão o tipo (MT, BT) pelo nome do arquivo: ele vira a pasta de cima
           const pasta = semExtensao(nome);
           const feicoes = lerKml(bytes).map((f) => ({ ...f, pasta: [pasta, ...f.pasta] }));
+          achadas = temSubterraneaKml(feicoes);
           novaRede = proporRedeKml(feicoes);
           detalhe = `${novaRede.vaos.length} vãos · ${novaRede.postes.length} postes`;
         } else {
           novoDxf = lerDxfGeometria(bytes);
+          achadas = temSubterraneaDxf(novoDxf);
           novaRede = proporRedeDxf(novoDxf);
           detalhe = `${novoDxf.linhas.length} linhas · ${novaRede.postes.length} postes · ${novoDxf.cotas.length} textos de cota`;
         }
         rede = novaRede;
         dxf = novoDxf;
+        subterraneas = achadas;
         projeto = { nome, os: os.trim(), detalhe };
+        bytesProjeto = bytes; camadasIncluidas = [];
         liberado = false; chaveEtiqueta = '';
         respostas = new Map(); m2Postes = {}; limparArvores();
         recalcular();
@@ -404,6 +427,7 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     incluirCamada(camada, tipo) {
       if (!rede || !dxf) return;
       rede = incluirCamadaNoNucleo(rede, dxf, camada, tipo);
+      camadasIncluidas = [...camadasIncluidas, { camada, tipo }];
       recalcular();
       avisar();
     },
@@ -560,6 +584,39 @@ export function criarEstado(deps: Dependencias = {}): Estado {
     },
 
     conferir: (bytes, dxfBytes) => conferirZip(bytes, dxfBytes),
+
+    projetoAberto: () => (projeto && bytesProjeto ? { bytes: bytesProjeto, dxf, camadasIncluidas: [...camadasIncluidas] } : null),
+
+    restaurar(c) {
+      if (!rede || !base || !projeto) return;
+      let r = rede;
+      const incluidas: { camada: string; tipo: TipoRede }[] = [];
+      if (dxf) {
+        for (const x of c.camadasIncluidas) { r = incluirCamadaNoNucleo(r, dxf, x.camada, x.tipo); incluidas.push({ camada: x.camada, tipo: x.tipo }); }
+      }
+      // só o vão que mudou ganha a marca (os outros ficam com o motivo da proposta)
+      for (const [id, m] of Object.entries(c.marcas)) {
+        const v = r.vaos.find((x) => x.id === id);
+        if (v && (v.tipo !== m.tipo || v.situacao !== m.situacao)) r = marcarVaoNoNucleo(r, id, { tipo: m.tipo, situacao: m.situacao });
+      }
+      rede = r;
+      camadasIncluidas = incluidas;
+      respostas = new Map(c.apps.map((a) => [a.aguaId, { resposta: a.resposta, largura: a.largura }]));
+      m2Postes = { ...c.m2Postes };
+      arvores = c.arvores.map((a) => ({ ...a, ponto: a.ponto ? [a.ponto[0], a.ponto[1]] as Pt : null }));
+      // a foto não vem no caso salvo: não se sabe mais se o ponto veio do GPS
+      infoFotos = Object.fromEntries(arvores.map((a) => [a.id, { aviso: null, origem: null }]));
+      for (const a of arvores) {
+        const n = /^arvore-(\d+)$/.exec(a.id);
+        if (n) contaArvores = Math.max(contaArvores, Number(n[1]));
+      }
+      limpeza = c.limpeza.map((l) => l.map((p) => [p[0], p[1]] as Pt));
+      modoMapa = null; erroArvores = null; erro = null; erroPasso = null;
+      recalcular(); // acerta a chave da etiqueta para a rede reposta
+      liberado = c.liberado;
+      recalcular();
+      avisar();
+    },
 
     ler: () => atual,
     aoMudar(f) {

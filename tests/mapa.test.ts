@@ -183,6 +183,32 @@ describe('mapa', () => {
   });
 });
 
+describe('UC do cliente no mapa (Parte 2)', () => {
+  it('desenha a UC com a classe uc e os outros blocos de UC com a classe uc-cand', () => {
+    const m = criarMapa(raiz, { marcarVao: () => {} });
+    m.atualizar({ base: BASE, rede: REDE, uc: [500060, 9500080], candidatosUc: [[500060, 9500080], [500150, 9500120]] });
+    const ucs = m.elemento.querySelectorAll('.ucs path.uc');
+    expect(ucs).toHaveLength(1);
+    expect(ucs[0].querySelector('title')!.textContent).toContain('UC do cliente');
+    // o bloco que já é a UC não aparece duas vezes como candidato
+    expect(m.elemento.querySelectorAll('.ucs .uc-cand')).toHaveLength(1);
+    m.atualizar({ base: BASE, rede: REDE, uc: null, candidatosUc: [] });
+    expect(m.elemento.querySelectorAll('.ucs *')).toHaveLength(0);
+  });
+
+  it('marcando a UC, o mapa entra no modo de clique e o clique vai para clicarNoMapa', () => {
+    const cliques: Pt[] = [];
+    const m = criarMapa(raiz, { marcarVao: (id) => { chamadas.push(id); }, clicarNoMapa: (p) => { cliques.push(p); } });
+    m.atualizar({ base: BASE, rede: REDE, marcandoUc: true });
+    expect(m.elemento.classList.contains('clicando')).toBe(true);
+    m.elemento.querySelector<SVGElement>('polyline[data-vao="v1"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    expect(cliques).toHaveLength(1);
+    expect(chamadas).toEqual([]);
+    m.atualizar({ base: BASE, rede: REDE, marcandoUc: false });
+    expect(m.elemento.classList.contains('clicando')).toBe(false);
+  });
+});
+
 describe('estradas do mapa (busca por janela)', () => {
   // estado de mentira: só a rede muda; quem escuta é chamado a cada troca
   function estadoFalso(rede: Rede | null) {

@@ -1,5 +1,6 @@
 // textos fixos dos avisos, copiados letra por letra do desenho aprovado
 export const TEXTOS = {
+  subterranea: 'este site ainda não calcula rede subterrânea; monte este kit à mão',
   semOrgao: 'órgão não identificado; consultar o P&M',
   semArea: 'sem área protegida no KMZ; confirme a APP em campo',
   proxima: 'não intervém, mas cite no memorial que não intervém em outra área protegida',
@@ -56,5 +57,20 @@ export const PORQUE_AVISO: Record<string, string> = {
   FAIXA_DOMINIO: 'Rede dentro da faixa de domínio de rodovia ou ferrovia exige autorização do órgão dono da via.',
   FAIXA_SEM_MALHA: 'Sem as malhas das rodovias, o site não sabe se a rede nova entra em faixa de domínio.',
   FAIXA_SEM_FERROVIA: 'Sem a malha de ferrovia, o site não sabe se a rede nova entra na faixa de domínio de uma ferrovia.',
+  CEP_VAZIO: 'O CEP vai no memorial e na planilha; sem ele o órgão pode devolver o processo.',
+  FASES_VAZIAS: 'O número de fases da ligação entra no memorial e na planilha; sem ele o órgão pode devolver o kit.',
+  POSTES_NAO_BATEM: 'Se a soma dos postes não bate com os postes novos do desenho, o memorial e a planilha saem com número errado.',
+  MUNICIPIO_EDITADO: 'O município digitado é diferente do que o KMZ indica; o órgão que licencia pode mudar e o kit sair para o lugar errado.',
+  REDE_SUBTERRANEA: 'Rede subterrânea tem regra própria: o kit calculado para rede aérea não vale para ela.',
   SEM_AREA: 'O KMZ não cobre todos os rios, lagoas e açudes: não ter área no KMZ não prova que não há APP.',
+  PLANILHA_ESCOLHER: 'Opção de lista errada ou vazia faz a Enel devolver o processo; o site só escreve a opção de que tem certeza.',
+  PLANILHA_SEM_VALOR: 'Célula vazia na linha da obra faz a Enel devolver o processo.',
+  PLANILHA_ASSUNTO: 'O assunto do e-mail diz à Enel que processo é este; assunto errado atrasa a análise.',
+  PLANILHA_COLUNA_NOVA: 'A Enel mudou a planilha: o site não sabe o que vai nessas colunas e elas podem ficar com o valor antigo ou vazias.',
+  PLANILHA_SEM_ASSINATURA: 'A planilha vai para a Enel assinada pelo responsável técnico.',
+  // provisório: texto a confirmar com o Italo
+  PLANILHA_PODA: 'Planilha e memorial que não dizem o mesmo sobre a poda fazem o órgão devolver o processo.',
+  // provisório: texto a confirmar com o Italo
+  PLANILHA_SUPRESSAO: 'Planilha e memorial que não dizem o mesmo sobre a supressão ou a limpeza de faixa fazem o órgão devolver o processo.',
+  PLANILHA_JA_ASSINADA:'A assinatura de outra obra, ou de outro responsável técnico, iria para a Enel em toda planilha, mesmo sem o caso conferido.',
 };

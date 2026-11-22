@@ -4,42 +4,16 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PRIVADOS } from './caminhos.ts';
-import { abrirZip, type ArquivoZip } from '../../src/nucleo/zip.ts';
-import { lerKml } from '../../src/nucleo/kml.ts';
-import { proporRedeKml } from '../../src/nucleo/rede.ts';
+import { FAIXA_GLOBAL, alvoETolerancia, montarCasoDoKit, type KitGabarito } from './caso-do-kit.ts';
 import { lerAreasProtegidas, type BaseAreas } from '../../src/nucleo/areas.ts';
-import { calcularCaso, type AreaConfirmada } from '../../src/nucleo/caso.ts';
 import { conferirZip } from '../../src/nucleo/conferir.ts';
-import type { Pt, TipoRede } from '../../src/nucleo/tipos.ts';
+import type { TipoRede } from '../../src/nucleo/tipos.ts';
 
 const GABARITO = join(PRIVADOS, 'gabarito.json');
 const KMZ = join(PRIVADOS, 'areas-protegidas.kmz');
 
-interface IntervencaoGabarito {
-  nomeNoMemorial: string;
-  nomeNoKmz: string | null;
-  gestor: string | null;
-  metrosMemorial: Partial<Record<TipoRede, number>>;
-  haMemorial: number;
-  metrosKml?: Partial<Record<TipoRede, number>>;
-  fonte: string;
-}
-interface KitGabarito {
-  zip: string;
-  rede: string[];
-  appsDoKit: string[];
-  intervencoes: IntervencaoGabarito[];
-  divergencias: string[];
-  amarelosConhecidos: string[];
-}
-
-// regra global do desenho, escrita aqui de novo para o teste não depender de src/regras
-const FAIXA_GLOBAL: Record<TipoRede, number> = { MT: 6, BT: 3, CONJ: 6 };
 const M2_POR_POSTE = 2.856;
 const TIPOS: TipoRede[] = ['MT', 'BT', 'CONJ'];
-const LARGURA_NAO_USADA = 0; // a APP já vem desenhada no kit; o caso não usa a largura
-
-const nomeDoArquivo = (caminho: string): string => caminho.slice(caminho.lastIndexOf('/') + 1).replace(/\.km[lz]$/i, '');
 
 describe.skipIf(!existsSync(GABARITO) || !existsSync(KMZ))('kits aprovados pelos órgãos', () => {
   // o Vitest roda este corpo mesmo com a suíte pulada: aqui só se lê o gabarito, e só se ele existir
@@ -55,27 +29,8 @@ describe.skipIf(!existsSync(GABARITO) || !existsSync(KMZ))('kits aprovados pelos
 
   kits.forEach((kit, i) => {
     it(`kit ${i + 1}`, () => {
-      const bytes = new Uint8Array(readFileSync(join(PRIVADOS, kit.zip)));
-      const arquivos = abrirZip(bytes);
-      const pega = (caminho: string): ArquivoZip => {
-        const a = arquivos.find((x) => x.caminho === caminho);
-        if (!a) throw new Error(`não achei no zip: ${caminho}`);
-        return a;
-      };
-
-      // a rede: só o que está dentro dos KMLs, sem o nome do arquivo (a tela vai passar o nome como pasta de cima)
-      const rede = proporRedeKml(kit.rede.flatMap((c) => lerKml(pega(c).bytes)));
-
-      // as APPs aprovadas no kit, aceitas como estão desenhadas
-      const confirmadas: AreaConfirmada[] = kit.appsDoKit.map((c) => {
-        const poligonos: Pt[][][] = lerKml(pega(c).bytes).flatMap((f) =>
-          f.geometrias.flatMap((g) => (g.t === 'poligono' ? [g.aneis] : [])),
-        );
-        expect(poligonos.length, `APP sem polígono: ${c}`).toBeGreaterThan(0);
-        return { nome: nomeDoArquivo(c), tipo: 'APP', poligonos, largura: LARGURA_NAO_USADA };
-      });
-
-      const caso = calcularCaso(rede, base, confirmadas);
+      const { bytes, caso, problemas } = montarCasoDoKit(kit, base);
+      expect(problemas, 'APP sem polígono').toEqual([]);
       expect.soft(caso.avisos.filter((a) => a.nivel === 'vermelho').map((a) => a.codigo), 'caso vermelho').toEqual([]);
 
       const doKmz = caso.intervencoes.filter((iv) => !('largura' in iv.area));
@@ -87,8 +42,7 @@ describe.skipIf(!existsSync(GABARITO) || !existsSync(KMZ))('kits aprovados pelos
         if (!iv) continue;
         expect.soft(iv.orgao?.gestor.split(' (')[0] ?? null, `gestor de ${esperado.nomeNoKmz}`).toBe(esperado.gestor);
         for (const t of TIPOS) {
-          const alvo = esperado.metrosKml ? (esperado.metrosKml[t] ?? 0) : (esperado.metrosMemorial[t] ?? 0);
-          const tol = esperado.metrosKml ? 1 : Math.max(2, 0.03 * alvo);
+          const { alvo, tol } = alvoETolerancia(esperado, t);
           const dif = Math.abs(iv.metros[t] - alvo);
           expect.soft(dif, `${t} em ${esperado.nomeNoKmz}: caso ${iv.metros[t].toFixed(1)} m, esperado ${alvo} m ±${tol.toFixed(1)}`).toBeLessThanOrEqual(tol);
         }
