@@ -230,7 +230,6 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
     const a = alvo.area as AreaProtegida; // confirmada nunca entra em semCruzar
     const dLinhas = a.linhas.map((l) => distRede(G.linha(l)));
     if (alvo.geo === null && Math.min(Infinity, ...dLinhas) <= TOL_JUNTA) {
-      // provisório: texto a confirmar com o Italo
       avisos.push({
         nivel: 'amarelo', codigo: 'CRUZA_LINHA', texto: `${a.nome}: ${TEXTOS.cruzaLinha}`,
         comoCorrigir: `Pergunte ao P&M como tratar "${a.nome}", que no KMZ é só uma linha e a rede nova cruza; o site não calcula metros nem hectares para linha.`,
