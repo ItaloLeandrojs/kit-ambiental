@@ -6,14 +6,15 @@
     <meta name="robots" content="noindex" />
     <link rel="icon" href="data:," />
     <title>Kit Ambiental</title>
-    <script type="module" crossorigin src="/kit-ambiental/assets/index-BXUSUEeZ.js"></script>
-    <link rel="stylesheet" crossorigin href="/kit-ambiental/assets/index-BRBsX-On.css">
+    <script type="module" crossorigin src="/kit-ambiental/assets/index-C4-lY9P0.js"></script>
+    <link rel="stylesheet" crossorigin href="/kit-ambiental/assets/index-CqajnWBS.css">
   </head>
   <body>
     <aside class="painel" aria-label="Passos do kit ambiental">
       <header class="cabeca">
         <h1>Kit Ambiental</h1>
         <p>Diz se a obra precisa de processo ambiental, monta o kit e confere o zip.</p>
+        <div id="caso-salvo"></div>
       </header>
       <div class="passos" id="passos"></div>
     </aside>
@@ -21,6 +22,7 @@
     <main class="previa" aria-label="Mapa de conferência">
       <div class="palco" id="palco">
         <div class="ferramentas">
+          <button type="button" class="botao" id="marcar-uc" aria-pressed="false" hidden>Marcar UC</button>
           <button type="button" class="botao" id="ajustar">Ajustar tela</button>
         </div>
         <div class="camadas" role="group" aria-label="Camadas do mapa">
@@ -32,11 +34,13 @@
           <span class="l"><i class="semtipo"></i>Vão novo sem tipo</span>
           <span class="l"><i class="area c-area"></i>Área protegida</span>
           <span class="l"><i class="area c-agua"></i>Água</span>
+          <span class="l"><i class="uc-escolhida"></i>UC do cliente</span>
+          <span class="l"><i class="uc-outra"></i>Outro bloco de UC</span>
           <span class="creditos">Estradas: OpenStreetMap (ODbL)</span>
         </div>
       </div>
       <footer class="status" id="status"></footer>
     </main>
-
+
   </body>
 </html>
