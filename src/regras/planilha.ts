@@ -125,34 +125,19 @@ export const PREFIXOS_AREA: { tipo: string; formas: string[] }[] = [
 export const TEXTOS_PLANILHA = {
   escolhaNaLista: 'escolha na lista ao abrir no Excel',
   semAssunto: 'sem área cruzada: confirme com o P&M o assunto do e-mail',
-  // provisório: texto a confirmar com o Italo
   assuntoSemModelo: 'área sem modelo de assunto na aba "Modelos Assunto E-mail": confirme com o P&M o assunto do e-mail',
-  // provisório: texto a confirmar com o Italo
   assuntoSemUc: 'UC não marcada no passo 5a: o assunto da A1 ficou como estava, porque sem a UC o site não sabe se ele leva a parte da UC; o texto curto saiu sem a frase da UC.',
-  // provisório: texto a confirmar com o Italo
   comoAssuntoSemUc: 'Marque a UC no passo 5a e baixe a planilha de novo.',
-  // provisório: texto a confirmar com o Italo
   colunaEscolher: 'Coluna {letra} ({cabecalho}): {escolha}.',
-  // provisório: texto a confirmar com o Italo
   colunaVariasSemSeparador: 'Coluna {letra} ({cabecalho}): a obra pede mais de uma opção ({opcoes}) e esta planilha não junta opções numa célula; {escolha}.',
-  // provisório: texto a confirmar com o Italo
   colunaSemValor: 'Coluna {letra} ({cabecalho}): o site não tem este dado; preencha no Excel.',
-  // provisório: texto a confirmar com o Italo
   colunasDesconhecidas: 'Colunas que o site não conhece nesta revisão da planilha, deixadas como estavam: {lista}.',
-  // provisório: texto a confirmar com o Italo
   comoEscolher: 'Abra a planilha no Excel e escolha a opção certa na lista da célula.',
-  // provisório: texto a confirmar com o Italo
   comoPreencher: 'Abra a planilha no Excel e preencha a célula.',
-  // provisório: texto a confirmar com o Italo
   comoAssunto: 'Pergunte ao P&M qual modelo da aba "Modelos Assunto E-mail" vale para esta obra e escreva na célula A1.',
-  // provisório: texto a confirmar com o Italo
   comoDesconhecidas: 'Preencha essas colunas no Excel e avise o Italo para o site aprender a revisão nova.',
-  // provisório: texto a confirmar com o Italo
   semLugarAssinatura: 'A planilha não tem a célula "Assinatura Responsável Técnico": a assinatura não foi posta.',
-  // provisório: texto a confirmar com o Italo
   comoAssinatura: 'Ponha a assinatura do responsável técnico na planilha pelo Excel.',
-  // provisório: texto a confirmar com o Italo
   jaAssinada: 'A planilha guardada no site já tem uma imagem de assinatura acima de "Assinatura Responsável Técnico": ela iria em toda planilha gerada, e o site não põe a assinatura nova por cima.',
-  // provisório: texto a confirmar com o Italo
   comoJaAssinada: 'Troque a planilha guardada pela planilha em branco da Enel, sem assinatura, e gere de novo.',
 } as const;

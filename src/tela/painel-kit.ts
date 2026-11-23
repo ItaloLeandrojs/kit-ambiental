@@ -65,7 +65,7 @@ const SIM_NAO_NA: [string, string][] = [...SIM_NAO, ['NÃO SE APLICA', 'NÃO SE 
 const TIPOS_REDE: [TipoRede, string][] = [['MT', 'MT'], ['BT', 'BT'], ['CONJ', 'conjugada']];
 const ERROS_DO_CASO = new Set<string>(Object.values(TEXTOS_CASO_SALVO));
 
-// provisório: texto a confirmar com o Italo (títulos dos avisos da Parte 2 na tela)
+// títulos dos avisos da Parte 2 na tela
 const TITULO_AVISO_KIT: Record<string, string> = {
   CEP_VAZIO: 'CEP em branco',
   FASES_VAZIAS: 'Fases da ligação',
@@ -440,7 +440,6 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
         h('div', {}, h('div', { class: 'nome' }, 'Assinatura do responsável técnico'),
           h('div', { class: 'det' }, a ? `imagem PNG · ${a.largura} × ${a.altura} px` : 'nenhuma imagem guardada'),
           a && url ? h('div', { class: 'assin folga' }, h('img', { src: url, alt: 'Miniatura da assinatura guardada' })) : null,
-          // provisório: texto a confirmar com o Italo
           h('p', { class: 'ajuda folga' }, 'Só entra no memorial e na planilha quando o caso não tem vermelho.')),
         h('div', { class: 'acoes' },
           botaoTrocar('.png', lerAssinatura, 'Escolher a imagem PNG da assinatura', a ? 'trocar' : 'escolher'),
@@ -495,7 +494,6 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
         campo('obra.endereco', 'Endereço da obra', d.obra.endereco, (v) => mudar((x) => { x.obra.endereco = v; })),
         campo('obra.municipio', 'Município', d.obra.municipio, (v) => mudar((x) => { x.obra.municipio = v; }), {
           placeholder: r.caso?.municipio ?? undefined,
-          // provisório: texto a confirmar com o Italo
           nota: r.caso?.municipio ? `Veio do KMZ: ${r.caso.municipio}. Em branco, o memorial usa este. Se você trocar, sai um aviso: o órgão foi calculado com o do KMZ.` : 'O KMZ não disse o município: digite.',
         }),
         h('div', { class: 'duas' },
@@ -540,7 +538,6 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
           return h('label', { class: 'confirma-solta' }, c, 'Não haverá retirada de rede nem de postes');
         })(),
         ...(d.retirada.nenhuma ? [] : [
-          // provisório: texto a confirmar com o Italo
           h('p', { class: 'ajuda' }, 'Sem marcar, diga os metros de rede por tipo e quantos postes saem.'),
           h('div', { class: 'duas' }, ...TIPOS_REDE.map(([t, rot]) => h('div', { class: 'cx' },
             h('label', { for: `retirada.metros.${t}` }, `Metros de ${rot}`),
@@ -563,14 +560,12 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
           const id = a.proposta.agua.id;
           return lista(`tipoAgua.${id}`, `Tipo de água da APP de ${a.proposta.agua.nome}`, d.tipoAgua[id] ?? '', AGUAS,
             (v) => mudar((x) => { if (v) x.tipoAgua[id] = v as TipoAgua; else delete x.tipoAgua[id]; }),
-            // provisório: texto a confirmar com o Italo
             { vazio: 'o do KMZ', nota: 'Vai para a planilha e para o memorial, com as mesmas palavras. Sem escolher, vale o tipo que o KMZ diz.' });
         }),
       ]),
       S('regional', 'Regional da pasta', [
         lista('regional', 'Regional', d.regional ?? '', REGIONAIS.map((x) => [x, x]), (v) => mudar((x) => { x.regional = (v || null) as Regional | null; }), {
           vazio: 'escolha a regional',
-          // provisório: texto a confirmar com o Italo
           nota: 'Vai no nome da pasta do kit. O site só sugere sozinho para Fortaleza; nos outros municípios, escolha na lista.',
         }),
         sugerida && d.regional === null
@@ -657,7 +652,6 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
           () => { const p = kit.baixarPlanilha(); salvar(p.nome, p.bytes, TIPO_XLSM); avisosPlanilha = { avisos: p.avisos, dados: k.dados, caso: r.caso, uc: ucChave, planilha: k.planilha?.nome ?? null }; },
           [seloAssinatura(true), escolher ? selo('am', plural(escolher, 'célula para escolher', 'células para escolher')) : null])),
       ...avisosDaPlanilha.map((a) => avisoKit(a)),
-      // provisório: texto a confirmar com o Italo
       avisosPlanilha && !avisosValem ? h('p', { class: 'amarelo-txt', role: 'status' }, 'Os dados mudaram depois de baixar a planilha: baixe a planilha de novo para ver os avisos dela.') : null,
       h('button', { type: 'button', class: 'botao forte', 'data-foco': 'seguir:6', onclick: () => ctx.seguir() }, 'Seguir para as figuras'),
     ];
@@ -722,13 +716,11 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
     return [
       zonaVarios(h('span', {}, 'Jogue aqui as imagens salvas do Google Earth (JPG ou PNG).', h('br'), 'Nome com o número ("Figura 3", "fig3") encaixa sozinho.'),
         '.jpg,.jpeg,.png,image/*', lerImagens, 'Escolher as imagens das figuras'),
-      // provisório: texto a confirmar com o Italo
       h('div', { class: 'cabeca-lista' }, h('span', {}, 'Confira cada figura antes de gerar o memorial'), h('span', {}, `${encaixadas.length} de ${k.figuras.length} com imagem`)),
       h('div', { class: 'lista' }, ...figuras),
       recusadas.length
         ? h('div', { class: 'recusada' }, h('strong', {}, 'Não encaixadas'), ...recusadas.map((a) => h('span', {}, h('code', {}, a.arquivo ?? ''), `: ${a.erro}`)))
         : null,
-      // provisório: texto a confirmar com o Italo
       h('label', { class: 'confirma-solta' }, caixa, 'Conferi: cada imagem está na figura certa'),
       erroBaixar ? h('p', { class: 'erro', role: 'alert' }, erroBaixar) : null,
       h('button', {
@@ -806,7 +798,6 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
         : null,
       reconhecidos.length
         ? secao('reconhecidos', plural(reconhecidos.length, 'arquivo reconhecido', 'arquivos reconhecidos'),
-          // provisório: texto a confirmar com o Italo
           'o site achou o papel pelo nome; abra para conferir ou trocar', null, false, [
             h('div', { class: 'cabeca-lista' }, h('span', {}, 'O que cada arquivo é'), h('span', {}, plural(reconhecidos.length, 'arquivo', 'arquivos'))),
             h('div', { class: 'lista' }, ...reconhecidos.map((s) => h('div', { class: 'solto' },
@@ -824,7 +815,6 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
         onclick: () => void montar(),
       }, 'Conferir e montar o kit'),
       semPapel.length
-        // provisório: texto a confirmar com o Italo
         ? h('p', { class: 'ajuda' }, 'Diga o que é ', ...semPapel.flatMap((s, i) => [i ? ', ' : '', h('code', {}, s.nome)]), ' para montar.')
         : k.soltos.length === 0 ? h('p', { class: 'ajuda' }, 'Solte os arquivos do kit para montar.') : null,
       k.ocupado ? h('p', { class: 'ajuda', role: 'status' }, 'Conferindo o kit...') : null,
@@ -882,7 +872,6 @@ export function criarPainelKit(raiz: HTMLElement, kit: EstadoKit, base: Estado, 
         : zona('Arraste aqui o zip do kit montado. Ele não sai do seu computador.', '.zip', lerZip, 'Escolher o zip do kit'),
       h('div', { class: 'arquivo' },
         h('div', {}, h('div', { class: 'nome' }, 'DXF do projeto (opcional)'),
-          // provisório: texto a confirmar com o Italo
           h('div', { class: 'det' }, dxf8 ? 'lido: os metros do zip são conferidos pelo desenho' : 'se tiver, solte também o DXF: os metros são conferidos pelo desenho')),
         botaoTrocar('.dxf', lerDxf, 'Escolher o DXF do projeto')),
       !r.caso ? h('p', { class: 'ajuda' }, h('strong', {}, 'Sem caso aberto'), TP.semCaso8.replace(/^Sem caso aberto/, '')) : null,

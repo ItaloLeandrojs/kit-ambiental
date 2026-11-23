@@ -9,30 +9,23 @@ export const TEXTOS = {
   litoral: 'Obra em município do litoral: confira se há duna, restinga ou beira-mar a menos de 100 m.',
   foraDaCoordenada: 'seu desenho não está na coordenada real; o kit sairia deslocado',
   shpDeslocado: 'o órgão devolve: shape não espacializado',
-  // provisório: texto a confirmar com o Italo
   cruzaLinha: 'a rede nova cruza esta área, que no KMZ é só uma linha; consultar o P&M',
-  // provisório: texto a confirmar com o Italo
   posteAConfirmar: 'ponto sem nome no KML tratado como poste novo; confirme no mapa',
   faixaDominio: 'precisa de processo DNIT/SOP',
-  // provisório: texto a confirmar com o Italo
   faixaSemMalha: 'Carregue as malhas DNIT e SOP para conferir a faixa de domínio',
-  // provisório: texto a confirmar com o Italo
   faixaSemMalhaDnit: 'Carregue a malha DNIT para conferir a faixa de domínio',
-  // provisório: texto a confirmar com o Italo
   faixaSemMalhaSop: 'Carregue a malha SOP para conferir a faixa de domínio',
-  // provisório: texto a confirmar com o Italo
   faixaFerrovia: 'precisa de processo da ferrovia',
-  // provisório: texto a confirmar com o Italo (vem depois de "N vãos novos sem tipo ficaram")
+  // vem depois de "N vãos novos sem tipo ficaram"
   vaosSemTipo: 'fora da conta: não entram nos metros, nos hectares nem no kit',
-  // provisório: texto a confirmar com o Italo (vem depois do nome da área)
+  // vem depois do nome da área
   areaNaoConferida: 'área não pôde ser conferida: o desenho dela no KMZ tem defeito',
-  // provisório: texto a confirmar com o Italo (vem depois do nome da área)
+  // vem depois do nome da área
   areaConsertada: 'desenho da área consertado, confira no Google Earth',
-  // provisório: texto a confirmar com o Italo
   faixaSemFerrovia: 'Faixa de ferrovia não conferida: carregue a malha de ferrovia',
 } as const;
 
-// "Por que importa" de cada aviso do caso, para o cartão da tela (texto provisório: a confirmar com o Italo)
+// "Por que importa" de cada aviso do caso, para o cartão da tela (revisado pelo Italo em 23/11/2026)
 export const PORQUE_AVISO: Record<string, string> = {
   CRUZA_LINHA: 'Sem polígono, o site não calcula metros nem hectares nessa travessia.',
   MUNICIPIO_INCERTO: 'O município define quem licencia em alguns casos.',
@@ -68,9 +61,7 @@ export const PORQUE_AVISO: Record<string, string> = {
   PLANILHA_ASSUNTO: 'O assunto do e-mail diz à Enel que processo é este; assunto errado atrasa a análise.',
   PLANILHA_COLUNA_NOVA: 'A Enel mudou a planilha: o site não sabe o que vai nessas colunas e elas podem ficar com o valor antigo ou vazias.',
   PLANILHA_SEM_ASSINATURA: 'A planilha vai para a Enel assinada pelo responsável técnico.',
-  // provisório: texto a confirmar com o Italo
   PLANILHA_PODA: 'Planilha e memorial que não dizem o mesmo sobre a poda fazem o órgão devolver o processo.',
-  // provisório: texto a confirmar com o Italo
   PLANILHA_SUPRESSAO: 'Planilha e memorial que não dizem o mesmo sobre a supressão ou a limpeza de faixa fazem o órgão devolver o processo.',
   PLANILHA_JA_ASSINADA:'A assinatura de outra obra, ou de outro responsável técnico, iria para a Enel em toda planilha, mesmo sem o caso conferido.',
 };

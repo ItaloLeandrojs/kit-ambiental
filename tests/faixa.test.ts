@@ -147,7 +147,7 @@ describe('avisosFaixa', () => {
     expect(avisosFaixaTodos(REDE, [longe('DNIT'), longe('SOP'), ferroviaLonge()])).toEqual([]);
   });
 
-  it('com rede nova e sem malha de ferrovia: amarelo provisório da ferrovia, nunca silêncio', () => {
+  it('com rede nova e sem malha de ferrovia: amarelo da ferrovia, nunca silêncio', () => {
     const longe = (t: Malha['tipo']) => malha(t, 'X', 9509000);
     const r = avisosFaixaTodos(REDE, [longe('DNIT'), longe('SOP')]);
     expect(r).toHaveLength(1);

@@ -1,7 +1,7 @@
 // Conferência do texto do memorial (desenho §6.7 e §8.1): lê o texto do PDF (ou do .docx) e confere contra o caso.
 // Trabalha sobre normalizar(texto), sem acento e em minúsculas para procurar, e guarda o original para citar na tela.
 // Nunca vermelho falso: o que não dá para ler com segurança sai amarelo, nunca verde e nunca vermelho.
-// Textos de tela desta conferência: provisório: texto a confirmar com o Italo
+// Textos de tela desta conferência: revisados pelo Italo em 23/11/2026
 // (menos o aviso dos passos 1 a 5, copiado do desenho §8.1).
 import type { Nivel, Pt, Rede, TipoRede } from './tipos.ts';
 import type { Caso } from './caso.ts';
@@ -39,7 +39,6 @@ const TOL_COORD = 5; // m: coordenada do texto igual à do caso até aqui
 const TOL_ARVORE = 20; // m: acima disso, a coordenada do texto não é desta árvore
 // decisão do Italo (20/11): metros diferentes do caso até max(2 m, 3%) saem amarelo (o KML e o CAD diferem um pouco)
 const folgaMetros = (esperado: number): number => Math.max(2, 0.03 * esperado);
-// provisório: texto a confirmar com o Italo
 const TEXTO_FOLGA = 'O KML e o CAD costumam diferir um pouco.';
 const TIPOS: TipoRede[] = ['MT', 'BT', 'CONJ'];
 const NOME_TIPO: Record<TipoRede, string> = { MT: 'média tensão', BT: 'baixa tensão', CONJ: 'conjugada' };
@@ -262,7 +261,6 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
     const naFolga =(lido: number, alvo: number): boolean => Math.abs(lido - alvo) <= folgaMetros(alvo);
     const avisoFolga = (cita: string, dif: TipoRede[]): void => {
       pertos++;
-      // provisório: texto a confirmar com o Italo
       itens.push(item('amarelo', 'METROS', `Metros de ${dif.map((t) => NOME_TIPO[t]).join(' e ')} um pouco diferentes ${de}`,
         `O texto diz ${cita}, e ${de} saem ${fala(esperado)} metros: a diferença fica dentro de 2 m ou 3%. ${TEXTO_FOLGA}`,
         `Confira qual medida vale e deixe o memorial, o KML e a planilha com os mesmos metros (${de}: ${fala(esperado)}).`));
@@ -317,7 +315,6 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
       if (xs.length > 1 && valores.length === 1 && (soma === esperado[t] || naFolga(soma, esperado[t]))) {
         fontes++;
         duvidas++;
-        // provisório: texto a confirmar com o Italo
         itens.push(item('amarelo', 'METROS', `Metros de ${NOME_TIPO[t]} repetidos em mais de uma frase`,
           `O texto diz ${valores[0]} metros de ${NOME_TIPO[t]} em ${citas}, e ${de} saem ${esperado[t]} metros. Somadas, as frases batem; se for a mesma rede dita duas vezes, o texto está errado. O site não sabe qual dos dois é.`,
           `Confira à mão: se for a mesma rede, escreva ${esperado[t]} metros; se forem trechos, deixe claro no texto que são trechos.`));
@@ -334,7 +331,6 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
           if (maior.v === esperado[t]) {
             fontes++;
             duvidas++;
-            // provisório: texto a confirmar com o Italo
             itens.push(item('amarelo', 'METROS', `Metros de ${NOME_TIPO[t]} em total e trechos`,
               `O texto diz ${maior.v} metros de ${NOME_TIPO[t]} em ${maior.cita}, e as outras frases (${xs.filter((x) => x !== maior).map((x) => `${x.v} metros`).join(' e ')}) somam esse total. ${de[0].toUpperCase()}${de.slice(1)} saem ${esperado[t]} metros. Parece certo, mas o site não tem certeza de que leu como total e trechos.`,
               `Confira à mão que ${maior.v} metros é o total da ${NOME_TIPO[t]} e as outras frases são os trechos dele.`));
@@ -348,7 +344,6 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
       if (valores.length > 1) {
         fontes++;
         ruins++;
-        // provisório: texto a confirmar com o Italo
         itens.push(item('vermelho', 'METROS', `Frases com metros de ${NOME_TIPO[t]} diferentes`,
           `O texto diz ${xs.map((x) => `${x.v} metros em ${x.cita}`).join(' e ')}, e ${de} saem ${esperado[t]} metros de ${NOME_TIPO[t]}. O órgão lê um memorial que se contradiz e devolve.`,
           `Deixe uma medida só para a ${NOME_TIPO[t]}, a ${de} (${esperado[t]} metros), em todas as frases, e gere o PDF de novo.`));
@@ -365,7 +360,6 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
       const n = numeroBr(m[1]);
       if (n !== total && naFolga(n, total)) {
         pertos++;
-        // provisório: texto a confirmar com o Italo
         itens.push(item('amarelo', 'METROS', `Extensão do projeto um pouco diferente ${de}`,
           `O texto diz ${aspas(f.o)}, e ${de} a rede nova tem ${total} metros: a diferença fica dentro de 2 m ou 3%. ${TEXTO_FOLGA}`,
           `Confira qual medida vale e deixe o memorial, o KML e a planilha com os mesmos metros (${total}).`));
@@ -382,7 +376,6 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
       `Confira à mão: ${de} saem ${fala(esperado)} metros.`));
     if (fontes > 0 && ruins === 0 && pertos === 0 && duvidas === 0) itens.push(verde('METROS', 'Metros da rede batem', `${fala(esperado)} metros, iguais ${de}.`));
   } else {
-    // provisório: texto a confirmar com o Italo
     itens.push(item('amarelo', 'METROS', 'Metros do texto não conferidos', `Sem o caso e sem os metros por tipo do KML/SHP do zip, os metros do texto não foram conferidos. ${AVISO_PASSOS}`, AVISO_PASSOS));
   }
 
@@ -401,13 +394,11 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
         const agua = [...aguasDe(nomeBusca(nome))];
         if (apps.mencoes === 0) {
           faltas++;
-          // provisório: texto a confirmar com o Italo
           itens.push(item('vermelho', 'AREA_FALTA', `APP cruzada que não aparece no texto: ${nome}`,
             `A rede nova cruza a APP "${nome}", mas o texto não fala de intervenção em APP (área de preservação permanente).`,
             'Escreva a intervenção na APP, com o tipo de água (rio, lagoa ou açude), os trechos e os hectares.'));
         } else if (agua.length > 0 && !agua.some((t) => apps.tipos.has(t))) {
           avisos++;
-          // provisório: texto a confirmar com o Italo
           itens.push(item('amarelo', 'AREA_FALTA', `Tipo de água da APP não achado no texto: ${nome}`,
             `A APP "${nome}" é de ${agua.map((t) => NOME_AGUA[t]).join(' ou ')}, e o texto fala de APP ${apps.tipos.size ? `de ${[...apps.tipos.keys()].map((t) => NOME_AGUA[t]).join(' e ')}` : 'sem dizer o tipo de água'}.`,
             `Confira se o memorial diz que a APP é de ${agua.map((t) => NOME_AGUA[t]).join(' ou ')}.`));
@@ -418,7 +409,6 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
       if (citacao === 'nome' || citacao === 'palavras') return;
       avisos++;
       const procurado = palavrasChave(nome).length ? ` (procurado: ${palavrasChave(nome).join(', ').toUpperCase()})` : '';
-      // provisório: texto a confirmar com o Italo
       itens.push(citacao === 'confira'
         ? item('amarelo', 'AREA_FALTA', `Confira a área cruzada no texto: ${nome}`,
           `A rede nova cruza "${nome}", e o texto só a cita por palavras${procurado} que também podem ser do município ou de outra coisa.`,
@@ -507,7 +497,7 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
     }
   }
   if (comPonto.length > 0 && arvoresRuins === 0) itens.push(verde('ARVORE', 'Árvores conferem', `As ${comPonto.length} árvores do KML estão no texto com a coordenada e a intervenção.`));
-  // sem caso e sem as árvores do KML do zip, o site não sabe se tem poda: nada de verde (provisório: texto a confirmar com o Italo)
+  // sem caso e sem as árvores do KML do zip, o site não sabe se tem poda: nada de verde
   const semArvores = !caso && ctx.arvores.length === 0;
   const semLimpeza = !caso && ctx.limpeza.length === 0;
   if (semArvores) {
@@ -554,14 +544,12 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
       contradicoes++;
       afirmadasSemCaso.add(a.nome);
       const nome = a.kw === 'poda' ? 'poda simples' : a.nome;
-      // provisório: texto a confirmar com o Italo
       itens.push(item('vermelho', 'ARVORE', `O texto diz que haverá ${nome}, mas o caso não tem`,
         `O texto diz ${recorte(pos.f, pos.m.index, pos.m.index + pos.m[0].length, 10)}, mas o KML/SHP das árvores não tem nenhuma árvore de ${nome}. O órgão confere árvore por árvore.`,
         `Ponha as árvores de ${nome} no passo das árvores, ou troque a frase para "não haverá ${nome}".`));
     } else if (pos && !a.existe && caso && a.kw === 'limpeza') {
       // limpeza de faixa afirmada sem limpeza no caso: o §6.7 não diz a cor; amarelo, nunca verde
       contradicoes++;
-      // provisório: texto a confirmar com o Italo
       itens.push(item('amarelo', 'CONTRADICAO', 'O texto diz que haverá limpeza de faixa, e o caso não tem',
         `O texto diz ${recorte(pos.f, pos.m.index, pos.m.index + pos.m[0].length, 10)}, mas o caso não tem limpeza de faixa marcada.`,
         'Marque a limpeza de faixa no passo das árvores, ou troque a frase para "não haverá limpeza de faixa".'));
@@ -585,7 +573,7 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
     .filter((m) => !/\b(?:rnp|registro|crea|cnpj|cpf|telefone|fone|celular|art|cep|uc|instalacao|conta|cliente)\b[^\d]{0,15}$/.test(f.b.slice(Math.max(0, m.index! - 25), m.index!)))
     .map((m) => m[0])))].filter((n) => n.replace(/^0+/, '') !== osCurta && n !== ctx.rt?.rnp.trim());
   if (os === '') {
-    // sem a OS do kit não há o que procurar (provisório: texto a confirmar com o Italo)
+    // sem a OS do kit não há o que procurar
     itens.push(item('amarelo', 'OS', 'OS do kit não conferida', 'O site não achou a OS do kit (nem projeto aberto, nem a pasta "<OS>_PROCESSO DOCUMENTAL_..." no zip), então a OS do texto não foi conferida.',
       'Abra o projeto desta obra nos passos 1 e 2, ou monte o zip com a pasta "<OS>_PROCESSO DOCUMENTAL_<REGIONAL>".'));
   } else if (citaOs) itens.push(verde('OS', 'OS do kit no texto', `O texto cita a OS ${os}.`));
@@ -871,7 +859,6 @@ export function conferirPlanilha(
     const pertos = diferentes.filter((x) => !difs.includes(x));
     const fala = (m: Record<TipoRede, number>): string => TIPOS.map((t) => `${NOME_TIPO[t]} ${m[t]}`).join(', ');
     if (pertos.length) {
-      // provisório: texto a confirmar com o Italo
       itens.push(item('amarelo', 'PLANILHA_METROS', `Metros de ${pertos.map((x) => NOME_TIPO[x.t]).join(' e ')} na planilha um pouco diferentes ${de}`,
         `A planilha diz ${pertos.map((x) => `${NOME_TIPO[x.t]} ${x.c!.trim()}`).join(', ')} metros, e ${de} saem ${fala(esperado)} metros: a diferença fica dentro de 2 m ou 3%. ${TEXTO_FOLGA}`,
         `Confira qual medida vale e deixe a planilha, o memorial e o KML com os mesmos metros (${de}: ${fala(esperado)}).`));
@@ -968,7 +955,6 @@ export function conferirPlanilha(
   const citaAssunto = `"${corta((ctx.assunto ?? '').trim())}"`;
   const osCurta = ctx.os.trim().replace(/^0+/, '');
   if (ctx.os.trim() === '') {
-    // provisório: texto a confirmar com o Italo
     itens.push(item('amarelo', 'PLANILHA_ASSUNTO', 'Assunto da A1 não conferido', 'O site não achou a OS do kit, então a OS e as áreas do assunto da A1 não foram conferidas.',
       'Abra o projeto desta obra nos passos 1 e 2, ou monte o zip com a pasta "<OS>_PROCESSO DOCUMENTAL_<REGIONAL>".'));
   } else if (!lido) {
@@ -996,7 +982,7 @@ export function conferirPlanilha(
       const chaves = (ps: ParteAssunto[]): string[] => [...new Set(ps.filter((p) => ucSabida || p.rede !== null).map((p) => `${p.rotulo}|${ucSabida ? p.uc : ''}|${p.rede}`))].sort();
       const certo = assuntoTexto(ctx.os.trim(), esperadas)!;
       if (chaves(lido.partes).join(';') === chaves(esperadas).join(';')) {
-        // sem a UC, a parte dela não foi conferida: amarelo, nunca verde (provisório: texto a confirmar com o Italo)
+        // sem a UC, a parte dela não foi conferida: amarelo, nunca verde
         if (ucSabida) itens.push(verde('PLANILHA_ASSUNTO', 'Assunto da A1 coerente com a UC e a rede', `A A1 diz ${citaAssunto}.`));
         else {
           itens.push(item('amarelo', 'PLANILHA_ASSUNTO', 'Assunto da A1: a posição da UC não foi conferida',

@@ -223,12 +223,12 @@ describe('associarImagens', () => {
   it('dois nomes com o mesmo número: o primeiro fica, o segundo volta com erro', () => {
     const r = associarImagens([pngSolto('fig2 b.png'), pngSolto('fig2 a.png')], figs(4));
     expect(r.find((x) => x.arquivo === 'fig2 a.png')).toEqual({ figura: 2, arquivo: 'fig2 a.png', erro: null });
-    expect(r.find((x) => x.arquivo === 'fig2 b.png')?.erro).toBe('já há uma imagem para a Figura 2'); // provisório
+    expect(r.find((x) => x.arquivo === 'fig2 b.png')?.erro).toBe('já há uma imagem para a Figura 2');
   });
 
   it('imagem sem número e sem figura livre: erro', () => {
     const r = associarImagens([pngSolto('1.png'), pngSolto('2.png'), pngSolto('sobra.png')], figs(2));
-    expect(r.find((x) => x.arquivo === 'sobra.png')?.erro).toBe('não sobrou figura para esta imagem'); // provisório
+    expect(r.find((x) => x.arquivo === 'sobra.png')?.erro).toBe('não sobrou figura para esta imagem');
   });
 
   it('imagem sem número não pega a figura que outra imagem reclama pelo número', () => {
