@@ -19,5 +19,6 @@ export const TAMANHO = { corpo: 21, titulo: 36, secao: 40, legenda: 20, cabecalh
 
 export const ESPACO = { depois: 200, linha: 288 }; // twips e 240avos de linha (docDefaults)
 
-// Heading 1 do memorial: Calibri Light 20 pt, cor verde escura, espaço antes de 360 e depois de 40.
-export const SECAO = { cor: '538135', antes: 360, depois: 40 };
+// Heading 1 do memorial: Calibri Light 20 pt, cor preta, espaço antes de 360 e depois de 40.
+// O aprovado usa verde escuro (538135); o Italo escolheu preto em 22/11 (a empresa é preto e branco).
+export const SECAO = { cor: '000000', antes: 360, depois: 40 };

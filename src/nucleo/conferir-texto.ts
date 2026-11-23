@@ -258,7 +258,8 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
     let fontes = 0;
     let ruins = 0;
     let pertos = 0;
-    const naFolga = (lido: number, alvo: number): boolean => Math.abs(lido - alvo) <= folgaMetros(alvo);
+    let duvidas = 0;
+    const naFolga =(lido: number, alvo: number): boolean => Math.abs(lido - alvo) <= folgaMetros(alvo);
     const avisoFolga = (cita: string, dif: TipoRede[]): void => {
       pertos++;
       // provisório: texto a confirmar com o Italo
@@ -311,8 +312,39 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
         if (naFolga(valores[0], esperado[t])) { fontes++; avisoFolga(xs[0].cita, [t]); continue; }
       }
       const soma = xs.reduce((s, x) => s + x.v, 0);
+      // M2 (decisão do Italo de 22/11): o mesmo valor em várias frases que, somado, bate com o caso pode ser trechos
+      // iguais ou a mesma medida errada repetida; o site não sabe qual: amarelo, nunca verde
+      if (xs.length > 1 && valores.length === 1 && (soma === esperado[t] || naFolga(soma, esperado[t]))) {
+        fontes++;
+        duvidas++;
+        // provisório: texto a confirmar com o Italo
+        itens.push(item('amarelo', 'METROS', `Metros de ${NOME_TIPO[t]} repetidos em mais de uma frase`,
+          `O texto diz ${valores[0]} metros de ${NOME_TIPO[t]} em ${citas}, e ${de} saem ${esperado[t]} metros. Somadas, as frases batem; se for a mesma rede dita duas vezes, o texto está errado. O site não sabe qual dos dois é.`,
+          `Confira à mão: se for a mesma rede, escreva ${esperado[t]} metros; se forem trechos, deixe claro no texto que são trechos.`));
+        continue;
+      }
       if (xs.length > 1 && soma === esperado[t]) { fontes++; continue; }
       if (xs.length > 1 && naFolga(soma, esperado[t])) { fontes++; avisoFolga(citas, [t]); continue; }
+      // M1 (decisão do Italo de 22/11): uma frase do total e as outras dos trechos que somam esse total.
+      // Se o total bate com o caso, o memorial pode estar certo, mas o site não tem certeza da leitura: amarelo.
+      // Se o total não bate, a diferença é real e cai no vermelho comum logo abaixo.
+      if (xs.length > 2) {
+        const maior = xs.reduce((m, x) => (x.v > m.v ? x : m), xs[0]);
+        if (soma - maior.v === maior.v) {
+          if (maior.v === esperado[t]) {
+            fontes++;
+            duvidas++;
+            // provisório: texto a confirmar com o Italo
+            itens.push(item('amarelo', 'METROS', `Metros de ${NOME_TIPO[t]} em total e trechos`,
+              `O texto diz ${maior.v} metros de ${NOME_TIPO[t]} em ${maior.cita}, e as outras frases (${xs.filter((x) => x !== maior).map((x) => `${x.v} metros`).join(' e ')}) somam esse total. ${de[0].toUpperCase()}${de.slice(1)} saem ${esperado[t]} metros. Parece certo, mas o site não tem certeza de que leu como total e trechos.`,
+              `Confira à mão que ${maior.v} metros é o total da ${NOME_TIPO[t]} e as outras frases são os trechos dele.`));
+            continue;
+          }
+          if (naFolga(maior.v, esperado[t])) { fontes++; avisoFolga(citas, [t]); continue; }
+          compara({ [t]: maior.v }, maior.cita);
+          continue;
+        }
+      }
       if (valores.length > 1) {
         fontes++;
         ruins++;
@@ -348,7 +380,7 @@ export function conferirTexto(texto: string, ctx: ContextoTexto): ItemConferenci
     if (fontes === 0 && !ambigua) itens.push(item('amarelo', 'METROS', 'Metros da rede não achados no texto',
       'O texto não tem o quadro da extensão total nem a frase do que será construído, então os metros não foram conferidos.',
       `Confira à mão: ${de} saem ${fala(esperado)} metros.`));
-    if (fontes > 0 && ruins === 0 && pertos === 0) itens.push(verde('METROS', 'Metros da rede batem', `${fala(esperado)} metros, iguais ${de}.`));
+    if (fontes > 0 && ruins === 0 && pertos === 0 && duvidas === 0) itens.push(verde('METROS', 'Metros da rede batem', `${fala(esperado)} metros, iguais ${de}.`));
   } else {
     // provisório: texto a confirmar com o Italo
     itens.push(item('amarelo', 'METROS', 'Metros do texto não conferidos', `Sem o caso e sem os metros por tipo do KML/SHP do zip, os metros do texto não foram conferidos. ${AVISO_PASSOS}`, AVISO_PASSOS));

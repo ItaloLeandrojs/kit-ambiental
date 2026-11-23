@@ -359,6 +359,33 @@ Serão construídos 180 metros de rede aérea de média tensão 13,8 kV.`, ctx);
     expect(itens.map((i) => i.nivel)).toEqual(['verde']);
   });
 
+  // re-revisão (M1), decisão do Italo de 22/11: frase do total + frases dos trechos do mesmo tipo sai amarelo, não vermelho falso
+  it('METROS (M1): frase do total e frases dos trechos do mesmo tipo dão amarelo, não vermelho', () => {
+    const { ctx } = montar();
+    const semCaso: ContextoTexto = { ...ctx, caso: null, rede: null, nomesDaBase: [], metrosZip: { MT: 400 } };
+    const t = 'Serão construídos 400 metros de rede de média tensão. Serão construídos 300 metros de rede de média tensão no primeiro trecho. '
+      + 'Serão construídos 100 metros de rede de média tensão no segundo trecho.';
+    const itens = conferirTexto(t, semCaso).filter((i) => i.codigo === 'METROS');
+    expect(itens.map((i) => i.nivel)).toEqual(['amarelo']);
+    expect(itens[0].porque).toContain('400');
+    // total e trechos fecham entre si, mas o total difere do caso de verdade: aí o vermelho é real
+    const errado = t.replace('400 metros', '500 metros').replace('300 metros', '400 metros');
+    expect(codigos(conferirTexto(errado, semCaso), 'vermelho')).toContain('METROS');
+  });
+
+  // re-revisão (M2), decisão do Italo de 22/11: o mesmo valor em duas frases que, somado, bate com o caso não sai verde
+  it('METROS (M2): duas frases com o mesmo valor que somam o caso dão amarelo, não verde', () => {
+    const { ctx } = montar();
+    const semCaso: ContextoTexto = { ...ctx, caso: null, rede: null, nomesDaBase: [], metrosZip: { MT: 400 } };
+    const t = 'Serão construídos 200 metros de rede de média tensão. A obra contempla 200 metros de rede de média tensão.';
+    const itens = conferirTexto(t, semCaso).filter((i) => i.codigo === 'METROS');
+    expect(itens.map((i) => i.nivel)).toEqual(['amarelo']);
+    expect(itens[0].porque).toContain('200');
+    // o mesmo valor certo repetido segue verde
+    const certo = t.replaceAll('200 metros', '400 metros');
+    expect(conferirTexto(certo, semCaso).filter((i) => i.codigo === 'METROS').map((i) => i.nivel)).toEqual(['verde']);
+  });
+
   it('TOTAL: "m etros" depois de um trecho legível na mesma frase dá amarelo, não vermelho nem verde', () => {
     const { ctx } = montar();
     const semCaso: ContextoTexto = { ...ctx, caso: null, rede: null, nomesDaBase: [], arvores: [], metrosZip: null };
