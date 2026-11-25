@@ -105,6 +105,19 @@ function alvoDe(a: AreaProtegida | AreaConfirmada): Alvo {
   return { area: a, geo, caixa };
 }
 
+// Nota Informativa 9491 do INCRA: a dispensa de consulta só vale para baixa tensão
+function avisoAssentamento(iv: Intervencao): Aviso {
+  const cruzada = `A rede nova cruza o assentamento "${iv.area.nome}"`;
+  const naoBt = Math.round(iv.metros.MT) + Math.round(iv.metros.CONJ); // arredonda por tipo, como no memorial
+  if (naoBt === 0) {
+    return { nivel: 'amarelo', codigo: 'ASSENTAMENTO_BT', texto: `${cruzada}.`, comoCorrigir: TEXTOS.assentamentoBt };
+  }
+  return {
+    nivel: 'amarelo', codigo: 'ASSENTAMENTO_MT',
+    texto: `${cruzada}, e esta obra tem ${naoBt} m de MT ou conjugada no assentamento.`, comoCorrigir: TEXTOS.assentamentoMt,
+  };
+}
+
 // Água da COGERH (açude, lagoa, rio) NÃO vira intervenção por si: o hectare é a faixa da obra, nunca o açude inteiro,
 // e a APP só entra depois de confirmada (vira AreaConfirmada). A água só dispara o aviso APP_POSSIVEL.
 export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfirmada[], m2PorPoste: Record<string, number> = {}): Caso {
@@ -216,6 +229,7 @@ export function calcularCaso(rede: Rede, base: BaseAreas, confirmadas: AreaConfi
         comoCorrigir: `Pergunte ao P&M quem licencia e quem é o gestor de "${iv.area.nome}" e escreva isso no memorial; o site não tem regra para essa pasta do KMZ.`,
       });
     }
+    if (iv.orgao?.categoria === 'Assentamento') avisos.push(avisoAssentamento(iv));
   }
 
   const proximas: Caso['proximas'] = [];

@@ -138,6 +138,8 @@ const TITULO_AVISO: Record<string, string> = {
   APP_POSSIVEL: 'Possível APP',
   PROXIMA: 'Perto, sem cruzar',
   LITORAL: 'Município do litoral',
+  ASSENTAMENTO_BT: 'Rede nova em assentamento (INCRA)',
+  ASSENTAMENTO_MT: 'Rede nova em assentamento (INCRA)',
   SEM_ORGAO: 'Órgão não identificado',
   SEM_AREA: 'Sem área protegida no KMZ',
   ARVORE_CARNAUBA: 'Carnaúba',

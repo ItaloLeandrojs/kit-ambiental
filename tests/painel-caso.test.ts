@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { criarEstado, ERRO_AVISO_VERMELHO, type Estado } from '../src/tela/estado.ts';
-import { criarPainel } from '../src/tela/painel.ts';
+import { blocoAviso, criarPainel } from '../src/tela/painel.ts';
 import type { AreaProtegida, BaseAreas } from '../src/nucleo/areas.ts';
 import type { Pt } from '../src/nucleo/tipos.ts';
 import type { Malha, TipoMalha } from '../src/nucleo/faixa.ts';
 import { readdirSync, readFileSync } from 'node:fs';
-import { PORQUE_AVISO } from '../src/regras/textos.ts';
+import { PORQUE_AVISO, TEXTOS } from '../src/regras/textos.ts';
 import { abrirZip } from '../src/nucleo/zip.ts';
 
 // tudo inventado, perto de (500000, 9500000)
@@ -45,9 +45,9 @@ const malhaLonge: Malha = { tipo: 'SOP', nome: 'SOP.kml', linhas: [{ nome: 'CE-0
 const malhaPerto: Malha = { tipo: 'SOP', nome: 'SOP.kml', linhas: [{ nome: 'CE-999', pts: [[499900, 9500070], [500300, 9500070]] }] };
 
 // com malha longe da obra por padrão, para os avisos da faixa não entrarem nas outras contas
-async function noCaso(malha: Malha | null = malhaLonge) {
+async function noCaso(malha: Malha | null = malhaLonge, base: BaseAreas = BASE) {
   const lerMalha = async (_b: Uint8Array, _n: string, tipo: TipoMalha): Promise<Malha> => ({ ...(tipo === 'FERROVIA' ? malhaLonge : (malha ?? malhaLonge)), tipo });
-  estado = criarEstado({ lerAreas: async () => BASE, lerMalha });
+  estado = criarEstado({ lerAreas: async () => base, lerMalha });
   criarPainel(raiz, estado, { salvar });
   await estado.carregarKmz(new Uint8Array([1]), 'Areas_Rev1.kmz');
   if (malha) {
@@ -213,6 +213,27 @@ describe('painel: avisos e documentos', () => {
     }
     expect(codigos.size).toBeGreaterThan(8);
     for (const c of codigos) expect(PORQUE_AVISO[c], c).toBeTruthy();
+  });
+
+  it('MT em assentamento: o cartão do caso diz os metros e que a dispensa é só para baixa tensão', async () => {
+    const pa = area(9, 'PA INVENTADO', ['Assentamentos Rurais_CE'], 500000, 9500000, 500200, 9500100);
+    await noCaso(malhaLonge, { ...BASE, areas: [pa] });
+    const cartao = [...passo(5).querySelectorAll('.aviso.amarelo')].find((a) => a.textContent!.includes('ASSENTAMENTO_MT'))!;
+    expect(cartao.querySelector('h2')!.textContent).toContain('Rede nova em assentamento (INCRA)');
+    expect([...cartao.querySelectorAll('dd')].map((d) => d.textContent)).toEqual([
+      'A rede nova cruza o assentamento "PA INVENTADO", e esta obra tem 100 m de MT ou conjugada no assentamento.',
+      'A dispensa da Nota 9491 vale só para baixa tensão.',
+      'Siga com o processo e confirme com o validador.',
+    ]);
+  });
+
+  it('BT em assentamento: o cartão traz o texto aprovado e nunca diz que não precisa de processo', () => {
+    const cartao = blocoAviso({ nivel: 'amarelo', codigo: 'ASSENTAMENTO_BT', texto: 'A rede nova cruza o assentamento "PA INVENTADO".', comoCorrigir: TEXTOS.assentamentoBt });
+    expect(cartao.querySelector('h2')!.textContent).toContain('Rede nova em assentamento (INCRA)');
+    const dd = [...cartao.querySelectorAll('dd')].map((d) => d.textContent);
+    expect(dd[1]).toBe('A Nota Informativa 9491 do INCRA e o e-mail da Enel de 22/12/2025 dispensam a consulta ao INCRA quando a rede é só de baixa tensão, o assentamento é federal e o solicitante é beneficiário da reforma agrária ou tem CCU, TD ou CDRU.');
+    expect(dd[2]).toContain('confirme com o validador antes de decidir sobre o kit');
+    expect(cartao.textContent!.toLowerCase()).not.toContain('não precisa de processo');
   });
 
   it('o aviso vermelho de bloqueio mostra "Por que importa"', async () => {

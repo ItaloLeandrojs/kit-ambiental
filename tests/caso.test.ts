@@ -58,6 +58,47 @@ describe('calcularCaso', () => {
     expect(Math.round(iv.metros.CONJ)).toBe(79);
   });
 
+  describe('assentamento do INCRA (Nota Informativa 9491)', () => {
+    const PASTA_PA = ['ÁREAS PROTEGIDAS', 'Assentamentos Rurais_CE'];
+    const daNota = (c: ReturnType<typeof calcularCaso>) => c.avisos.filter((a) => a.codigo.startsWith('ASSENTAMENTO'));
+
+    it('só BT: um amarelo com o nome, as condições e a confirmação com o validador', () => {
+      const pa = area('PA INVENTADO', PASTA_PA, 0, 0, 100, 100);
+      const avisos = daNota(calcularCaso(rede([vao('a', 'BT', [pt(10, 50), pt(55, 50)])]), base([pa]), []));
+      expect(avisos).toHaveLength(1);
+      expect(avisos[0]).toMatchObject({ nivel: 'amarelo', codigo: 'ASSENTAMENTO_BT', texto: 'A rede nova cruza o assentamento "PA INVENTADO".' });
+      expect(avisos[0].comoCorrigir).toContain('confirme com o validador antes de decidir sobre o kit');
+    });
+
+    it('MT ou conjugada dentro: diz os metros e manda seguir com o processo', () => {
+      const pa = area('PA INVENTADO', PASTA_PA, 0, 0, 300, 100);
+      const r = rede([vao('a', 'MT', [pt(10, 50), pt(26, 50)]), vao('b', 'BT', [pt(26, 50), pt(49, 50)]), vao('c', 'CONJ', [pt(49, 50), pt(128, 50)])]);
+      const avisos = daNota(calcularCaso(r, base([pa]), []));
+      expect(avisos).toHaveLength(1);
+      expect(avisos[0]).toMatchObject({ nivel: 'amarelo', codigo: 'ASSENTAMENTO_MT', comoCorrigir: 'Siga com o processo e confirme com o validador.' });
+      expect(avisos[0].texto).toContain('95 m de MT ou conjugada');
+    });
+
+    it('poste novo sem vão dentro do assentamento também avisa', () => {
+      const pa = area('PA INVENTADO', PASTA_PA, 0, 0, 100, 100);
+      const r = rede([vao('a', 'BT', [pt(200, 50), pt(240, 50)])], [poste('p1', pt(50, 50), '1')]);
+      expect(daNota(calcularCaso(r, base([pa]), [])).map((a) => a.codigo)).toEqual(['ASSENTAMENTO_BT']);
+    });
+
+    it('um aviso por assentamento; perto sem cruzar, quilombola, UC e nome com a palavra não avisam', () => {
+      const r = rede([vao('a', 'BT', [pt(10, 50), pt(155, 50)])]);
+      const dois = base([area('PA UM', PASTA_PA, 0, 0, 50, 100), area('PA DOIS', PASTA_PA, 100, 0, 200, 100)]);
+      expect(daNota(calcularCaso(r, dois, []))).toHaveLength(2);
+      const outras = base([
+        area('PA PERTO', PASTA_PA, 0, 80, 200, 120),
+        area('QUILOMBO', ['Territórios Quilombolas_CE'], 0, 0, 200, 100),
+        area('PERÍMETRO SEM ASSENTAMENTO', ['Perímetros Irrigados DNOCS'], 0, 0, 200, 100),
+        area('UC Inventada', UC_ESTADUAL, 0, 0, 200, 100),
+      ]);
+      expect(daNota(calcularCaso(r, outras, []))).toEqual([]);
+    });
+  });
+
   it('vãos seguidos do mesmo tipo dentro da mesma entrada viram um trecho, com os postes das pontas', () => {
     const uc = area('UC Inventada', UC_ESTADUAL, 0, 0, 100, 100);
     const r = rede(

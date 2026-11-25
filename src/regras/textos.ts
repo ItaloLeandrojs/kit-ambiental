@@ -23,6 +23,9 @@ export const TEXTOS = {
   // vem depois do nome da área
   areaConsertada: 'desenho da área consertado, confira no Google Earth',
   faixaSemFerrovia: 'Faixa de ferrovia não conferida: carregue a malha de ferrovia',
+  // Nota Informativa 9491 do INCRA (texto aprovado pelo Italo em 25/11/2026); o site nunca diz sozinho que não precisa de processo
+  assentamentoBt: 'Faça a consulta pública de beneficiários e guarde o print. Confira se o assentamento é a única intervenção (sem APP, poda, supressão ou faixa de domínio). Anexe o print e o documento no GOM.net e confirme com o validador antes de decidir sobre o kit.',
+  assentamentoMt: 'Siga com o processo e confirme com o validador.',
 } as const;
 
 // "Por que importa" de cada aviso do caso, para o cartão da tela (revisado pelo Italo em 23/11/2026)
@@ -38,6 +41,8 @@ export const PORQUE_AVISO: Record<string, string> = {
   APP_POSSIVEL: 'Obra dentro da APP pode exigir processo. APP só se confirma em campo.',
   PROXIMA: 'Não há intervenção, mas o órgão quer saber que você olhou.',
   LITORAL: 'Duna, restinga e beira-mar têm proteção própria e podem exigir processo.',
+  ASSENTAMENTO_BT: 'A Nota Informativa 9491 do INCRA e o e-mail da Enel de 22/12/2025 dispensam a consulta ao INCRA quando a rede é só de baixa tensão, o assentamento é federal e o solicitante é beneficiário da reforma agrária ou tem CCU, TD ou CDRU.',
+  ASSENTAMENTO_MT: 'A dispensa da Nota 9491 vale só para baixa tensão.',
   SEM_ORGAO: 'Sem saber o órgão, o processo pode ser protocolado no lugar errado.',
   ETIQUETA_LONGE: 'Se as coordenadas escritas não batem com o desenho, o kit pode sair deslocado e o órgão devolve.',
   FORA_UTM: 'Um desenho fora das coordenadas reais não cai no mapa: o kit sairia deslocado e o órgão devolve.',
